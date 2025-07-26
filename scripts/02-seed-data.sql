@@ -1,0 +1,49 @@
+-- Insert sample suppliers
+INSERT INTO public.suppliers (name, email, phone, address, avg_delivery_days, price_rating, sla_rating, region, rating, price_competitiveness, reliability_score, total_orders) VALUES
+('Global Fashion Supply Co.', 'orders@globalfashion.com', '+1-555-0101', '123 Fashion Ave, New York, NY', 7, 4.2, 4.5, 'North America', 4.3, 85, 92, 150),
+('Asian Textile Partners', 'contact@asiantextile.com', '+86-555-0202', '456 Silk Road, Shanghai, China', 14, 3.8, 4.1, 'Asia', 3.9, 90, 88, 210),
+('European Premium Goods', 'sales@europremium.eu', '+49-555-0303', '789 Quality St, Berlin, Germany', 10, 4.7, 4.8, 'Europe', 4.7, 75, 95, 80),
+('Quick Local Supplier', 'hello@quicklocal.com', '+1-555-0404', '321 Speed Lane, Los Angeles, CA', 3, 3.9, 4.3, 'North America', 4.1, 80, 90, 300),
+('Sustainable Materials Inc.', 'info@sustainable.com', '+1-555-0505', '654 Green Way, Portland, OR', 12, 4.4, 4.6, 'North America', 4.5, 70, 93, 120),
+('Eco-Friendly Fabrics Ltd.', 'sales@ecofabrics.com', '+44-555-0606', '10 Green Lane, London, UK', 9, 4.1, 4.2, 'Europe', 4.0, 88, 89, 90),
+('Tech Components Co.', 'info@techcomp.com', '+1-555-0707', '789 Silicon Valley, CA', 5, 4.6, 4.7, 'North America', 4.6, 82, 94, 180),
+('Luxury Leather Goods', 'contact@luxleather.com', '+33-555-0808', '1 Rue de la Paix, Paris, France', 10, 4.8, 4.9, 'Europe', 4.8, 70, 98, 60);
+
+-- Insert sample buyers
+INSERT INTO public.buyers (name, email, phone, company, region) VALUES
+('Sarah Johnson', 'sarah@retailchain.com', '+1-555-1001', 'Retail Chain Corp', 'North America'),
+('Michael Chen', 'mchen@fashionboutique.com', '+1-555-1002', 'Fashion Boutique LLC', 'North America'),
+('Emma Rodriguez', 'emma@trendystore.com', '+1-555-1003', 'Trendy Store Inc', 'North America'),
+('David Kim', 'david@luxurygoods.com', '+1-555-1004', 'Luxury Goods Ltd', 'North America'),
+('Lisa Thompson', 'lisa@casualwear.com', '+1-555-1005', 'Casual Wear Co', 'North America'),
+('Alex Green', 'alex@onlinefashion.com', '+1-555-1006', 'Online Fashion Hub', 'North America'),
+('Maria Garcia', 'maria@boutique.es', '+34-555-1007', 'Spanish Boutique', 'Europe'),
+('Kenji Tanaka', 'kenji@jpnretail.jp', '+81-555-1008', 'Japan Retail Group', 'Asia');
+
+-- Insert sample purchase orders
+INSERT INTO public.purchase_orders (po_number, subject, status, total_amount, items, items_count, supplier_id, negotiation_terms) VALUES
+('PO-2024-001', 'Spring Collection Restock', 'received', 15750.00, '[{"sku": "SKU-001", "name": "Cotton T-Shirt", "quantity": 100, "price": 12.50}, {"sku": "SKU-002", "name": "Denim Jeans", "quantity": 50, "price": 35.00}]', 2, (SELECT id FROM suppliers WHERE name = 'Global Fashion Supply Co.' LIMIT 1), 'Net 30 payment terms, 5% early payment discount'),
+('PO-2024-002', 'Summer Accessories Order', 'sent', 8900.00, '[{"sku": "SKU-003", "name": "Sun Hat", "quantity": 75, "price": 18.00}, {"sku": "SKU-004", "name": "Beach Bag", "quantity": 60, "price": 22.50}]', 2, (SELECT id FROM suppliers WHERE name = 'Asian Textile Partners' LIMIT 1), 'FOB shipping, quality inspection required'),
+('PO-2024-003', 'Premium Leather Goods', 'draft', 12400.00, '[{"sku": "SKU-005", "name": "Leather Wallet", "quantity": 40, "price": 85.00}, {"sku": "SKU-006", "name": "Leather Belt", "quantity": 30, "price": 65.00}]', 2, (SELECT id FROM suppliers WHERE name = 'European Premium Goods' LIMIT 1), 'Premium quality standards, extended warranty'),
+('PO-2024-004', 'Winter Apparel Order', 'pending', 22000.00, '[{"sku": "SKU-007", "name": "Wool Sweater", "quantity": 80, "price": 75.00}, {"sku": "SKU-008", "name": "Winter Coat", "quantity": 40, "price": 150.00}]', 2, (SELECT id FROM suppliers WHERE name = 'Global Fashion Supply Co.' LIMIT 1), 'Payment upon delivery, 2% discount for bulk'),
+('PO-2024-005', 'New Tech Gadgets', 'sent', 5500.00, '[{"sku": "SKU-009", "name": "Smartwatch", "quantity": 20, "price": 200.00}, {"sku": "SKU-010", "name": "Wireless Earbuds", "quantity": 30, "price": 50.00}]', 2, (SELECT id FROM suppliers WHERE name = 'Tech Components Co.' LIMIT 1), 'Standard terms, 1-year warranty');
+
+-- Insert sample return items
+INSERT INTO public.return_items (order_id, product_id, product_name, return_reason, purchase_date, category, images, notes, condition, ai_classification, confidence_score, resale_platform, eligibility_status, refund_status, refund_amount, ai_reasoning) VALUES
+('ORD-001', 'SKU-R001', 'Blue Cotton Dress', 'Size too small', '2024-01-15', 'Apparel', ARRAY['/placeholder.svg?height=100&width=100', '/placeholder.svg?height=100&width=100'], 'Customer ordered wrong size, item in perfect condition', 'new', 'relist', 0.95, NULL, 'eligible', 'processed', 45.99, 'Item is in excellent condition with tags attached. Perfect for relisting in main store.'),
+('ORD-002', 'SKU-R002', 'Red Sneakers', 'Defective sole', '2024-01-20', 'Footwear', ARRAY['/placeholder.svg?height=100&width=100'], 'Manufacturing defect on left shoe sole', 'fair', 'outlet', 0.85, NULL, 'eligible', 'processed', 89.99, 'Manufacturing defect makes it unsuitable for main store but acceptable for outlet at reduced price.'),
+('ORD-003', 'SKU-R003', 'Designer Handbag', 'Changed mind', '2024-01-25', 'Accessories', ARRAY['/placeholder.svg?height=100&width=100', '/placeholder.svg?height=100&width=100'], 'Customer no longer wants item, minimal wear', 'excellent', 'resale', 0.90, 'therealreal', 'eligible', 'pending', 299.99, 'High-value designer item with minimal wear. Best suited for luxury resale platform like TheRealReal.'),
+('ORD-004', 'SKU-R004', 'Damaged Jacket', 'Arrived damaged', '2024-01-30', 'Apparel', ARRAY['/placeholder.svg?height=100&width=100'], 'Significant tear in fabric, likely shipping damage', 'poor', 'discard', 0.92, NULL, 'flagged', 'pending', 0.00, 'Damage too extensive for any resale option. Recommend donation or disposal.'),
+('ORD-005', 'SKU-R005', 'Vintage Watch', 'Not as described', '2024-02-01', 'Accessories', ARRAY['/placeholder.svg?height=100&width=100'], 'Authenticity concerns raised by customer', 'good', 'manual_review', 0.70, NULL, 'flagged', 'pending', 450.00, 'Requires manual authentication review before determining next steps.'),
+('ORD-006', 'SKU-R006', 'Yoga Mat', 'Wrong color', '2024-02-05', 'Sports', ARRAY['/placeholder.svg?height=100&width=100'], 'Customer received blue instead of green, unused', 'new', 'relist', 0.98, NULL, 'eligible', 'processed', 25.00, 'Item is new and unused, simple color swap. Relist immediately.'),
+('ORD-007', 'SKU-R007', 'Bluetooth Speaker', 'Sound distortion', '2024-02-10', 'Electronics', ARRAY['/placeholder.svg?height=100&width=100'], 'Crackling sound at high volume', 'fair', 'outlet', 0.80, NULL, 'eligible', 'pending', 75.00, 'Minor functional defect, suitable for outlet with clear disclosure.'),
+('ORD-008', 'SKU-R008', 'Silk Scarf', 'Stain', '2024-02-15', 'Accessories', ARRAY['/placeholder.svg?height=100&width=100'], 'Small coffee stain, difficult to remove', 'poor', 'discard', 0.85, NULL, 'flagged', 'pending', 0.00, 'Stain significantly impacts value, not suitable for resale.'),
+('ORD-009', 'SKU-R009', 'Winter Boots', 'Too tight', '2024-02-20', 'Footwear', ARRAY['/placeholder.svg?height=100&width=100'], 'Customer found them too narrow, worn once indoors', 'excellent', 'relist', 0.93, NULL, 'eligible', 'processed', 120.00, 'Worn minimally, excellent condition. Can be relisted.'),
+('ORD-010', 'SKU-R010', 'Coffee Maker', 'Missing part', '2024-02-25', 'Home & Garden', ARRAY['/placeholder.svg?height=100&width=100'], 'Missing carafe, box damaged', 'good', 'manual_review', 0.65, NULL, 'flagged', 'pending', 90.00, 'Missing critical component, requires manual assessment for parts or repair.');
+
+-- Insert sample resale items
+INSERT INTO public.resale_items (return_item_id, product_name, platform, listing_price, current_status, sold_price, profit_margin, platform_listing_id, listed_at, sold_at) VALUES
+((SELECT id FROM return_items WHERE product_id = 'SKU-R003' LIMIT 1), 'Designer Handbag', 'therealreal', 299.99, 'listed', NULL, NULL, 'TRRLSTG123', '2024-03-01 10:00:00+00', NULL),
+((SELECT id FROM return_items WHERE product_id = 'SKU-R001' LIMIT 1), 'Blue Cotton Dress', 'shopify', 45.99, 'sold', 40.00, 75.00, 'SHPLSTG456', '2024-02-01 11:30:00+00', '2024-02-10 14:00:00+00'),
+((SELECT id FROM return_items WHERE product_id = 'SKU-R006' LIMIT 1), 'Yoga Mat', 'shopify', 25.00, 'listed', NULL, NULL, 'SHPLSTG789', '2024-02-06 09:00:00+00', NULL),
+((SELECT id FROM return_items WHERE product_id = 'SKU-R009' LIMIT 1), 'Winter Boots', 'poshmark', 120.00, 'listed', NULL, NULL, 'POSHLSTG012', '2024-02-22 16:00:00+00', NULL);
