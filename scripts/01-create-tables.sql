@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS public.purchase_orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   owner_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NULL,
   supplier_id UUID REFERENCES public.suppliers(id),
+  buyer_id UUID REFERENCES public.buyers(id) ON DELETE SET NULL, -- New: Link to buyers table
   po_number TEXT UNIQUE NOT NULL,
   subject TEXT,
   status TEXT DEFAULT 'draft', -- draft, sent, confirmed, delivered, received, cancelled
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS public.purchase_orders (
   items_count INTEGER DEFAULT 0, -- New: count of items in the order
   negotiation_terms TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  po_sent_at TIMESTAMP WITH TIME ZONE NULL, -- New: Timestamp when PO was sent via email
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -89,6 +91,9 @@ CREATE TABLE IF NOT EXISTS public.return_items (
   refund_status TEXT DEFAULT 'pending', -- pending, processed, failed
   refund_amount DECIMAL(10,2),
   ai_reasoning TEXT,
+  ai_suggested_platform TEXT, -- New: AI's suggested resale platform
+  suggestion_reason TEXT, -- New: AI's reasoning for the suggestion
+  final_platform_choice TEXT, -- New: Manual override for final platform
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

@@ -4,6 +4,8 @@ export interface GeminiResponse {
   reasoning: string
   confidence: number
   suggestions?: string[]
+  ai_suggested_platform?: string // New field
+  suggestion_reason?: string // New field
 }
 
 export async function classifyReturnItem(itemData: {
@@ -19,38 +21,44 @@ export async function classifyReturnItem(itemData: {
   const { productName, returnReason, category, notes } = itemData
 
   // Simple rule-based classification for demo
-  let classification = "review"
+  let classification = "manual_review" // Changed default to manual_review
   let reasoning = "Requires manual review"
   let confidence = 0.7
-  let suggestions: string[] = []
+  let ai_suggested_platform: string | undefined = undefined
+  let suggestion_reason: string | undefined = undefined
 
   if (returnReason.toLowerCase().includes("size") && notes.toLowerCase().includes("perfect condition")) {
     classification = "relist"
     reasoning = "Item is in perfect condition with only size issues. Ideal for relisting in main store."
     confidence = 0.95
-    suggestions = ["Update size chart", "Add size guide"]
+    ai_suggested_platform = "Shopify"
+    suggestion_reason = "Perfect condition, high demand for this product type."
   } else if (returnReason.toLowerCase().includes("defect") && !notes.toLowerCase().includes("significant")) {
     classification = "outlet"
     reasoning = "Minor defect makes it suitable for outlet store at reduced price."
     confidence = 0.85
-    suggestions = ["Mark as outlet item", "Apply 30% discount"]
+    ai_suggested_platform = "Outlet Store"
+    suggestion_reason = "Minor cosmetic defect, suitable for discounted sale."
   } else if (category === "Accessories" && returnReason.toLowerCase().includes("changed mind")) {
     classification = "marketplace"
     reasoning = "High-value accessory in good condition. Best suited for marketplace resale."
     confidence = 0.8
-    suggestions = ["List on TheRealReal", "Professional photos recommended"]
+    ai_suggested_platform = "TheRealReal"
+    suggestion_reason = "High-value luxury item, best for authenticated marketplaces."
   } else if (notes.toLowerCase().includes("damage") || notes.toLowerCase().includes("tear")) {
     classification = "discard"
     reasoning = "Damage too extensive for resale. Recommend donation or disposal."
     confidence = 0.9
-    suggestions = ["Donate to charity", "Recycle materials if possible"]
+    ai_suggested_platform = "Donate"
+    suggestion_reason = "Significant damage, not suitable for resale or outlet."
   }
 
   return {
     classification,
     reasoning,
     confidence,
-    suggestions,
+    ai_suggested_platform,
+    suggestion_reason,
   }
 }
 

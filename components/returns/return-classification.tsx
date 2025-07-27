@@ -1,11 +1,14 @@
 "use client"
 
+import { Label } from "@/components/ui/label"
+
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Loader2, CheckCircle, AlertCircle, XCircle } from "lucide-react"
 import { classifyReturnItem, suggestResalePlatform } from "@/lib/gemini"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface ReturnItem {
   id: string
@@ -18,14 +21,22 @@ interface ReturnItem {
   resalePlatform?: string
   eligibilityStatus: string
   aiReasoning?: string
+  ai_suggested_platform?: string | null // New field
+  suggestion_reason?: string | null // New field
+  final_platform_choice?: string | null // New field
 }
 
 interface ReturnClassificationProps {
   items: ReturnItem[]
   onClassificationUpdate: (itemId: string, classification: string, reasoning: string, platform?: string) => void
+  onFinalPlatformChange: (itemId: string, newPlatform: string) => void // New prop for manual override
 }
 
-export function ReturnClassification({ items, onClassificationUpdate }: ReturnClassificationProps) {
+export function ReturnClassification({
+  items,
+  onClassificationUpdate,
+  onFinalPlatformChange,
+}: ReturnClassificationProps) {
   const [processingItems, setProcessingItems] = useState<Set<string>>(new Set())
 
   const handleClassifyItem = async (item: ReturnItem) => {
@@ -37,6 +48,7 @@ export function ReturnClassification({ items, onClassificationUpdate }: ReturnCl
         returnReason: item.returnReason,
         category: item.category,
         notes: item.notes,
+        imageUrl: item.images && item.images[0] ? item.images[0] : undefined,
       })
 
       let platform = undefined
@@ -44,12 +56,19 @@ export function ReturnClassification({ items, onClassificationUpdate }: ReturnCl
         const platformSuggestion = await suggestResalePlatform({
           category: item.category,
           value: 100, // Mock value
-          condition: "good",
+          condition: item.condition || "good",
         })
         platform = platformSuggestion.platform
       }
 
-      onClassificationUpdate(item.id, classification.classification, classification.reasoning, platform)
+      onClassificationUpdate(
+        item.id,
+        classification.classification,
+        classification.reasoning,
+        platform,
+        classification.ai_suggested_platform, // Pass new AI fields
+        classification.suggestion_reason, // Pass new AI fields
+      )
     } catch (error) {
       console.error("Classification failed:", error)
     } finally {
@@ -72,6 +91,7 @@ export function ReturnClassification({ items, onClassificationUpdate }: ReturnCl
       case "discard":
         return <Badge className="bg-red-100 text-red-800">Discard</Badge>
       case "review":
+      case "manual_review":
         return <Badge variant="outline">Manual Review</Badge>
       default:
         return <Badge variant="secondary">Pending</Badge>
@@ -100,9 +120,25 @@ export function ReturnClassification({ items, onClassificationUpdate }: ReturnCl
       facebook: "Facebook Marketplace",
       thredup: "ThredUp",
       depop: "Depop",
+      "outlet store": "Outlet Store",
+      donate: "Donate",
+      recycle: "Recycle",
     }
-    return platforms[platform] || platform
+    return platforms[platform.toLowerCase()] || platform
   }
+
+  const resalePlatforms = [
+    "eBay",
+    "Poshmark",
+    "TheRealReal",
+    "Mercari",
+    "Facebook Marketplace",
+    "ThredUp",
+    "Depop",
+    "Outlet Store",
+    "Donate",
+    "Recycle",
+  ]
 
   return (
     <Card>
@@ -160,18 +196,56 @@ export function ReturnClassification({ items, onClassificationUpdate }: ReturnCl
                 </div>
               )}
 
-              {!item.classification && (
-                <Button onClick={() => handleClassifyItem(item)} disabled={processingItems.has(item.id)} size="sm">
-                  {processingItems.has(item.id) ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Classifying...
-                    </>
-                  ) : (
-                    "Classify with AI"
-                  )}
-                </Button>
+              {item.ai_suggested_platform && (
+                <div className="bg-purple-50 p-3 rounded-lg mb-4">
+                  <p className="text-sm">
+                    <span className="font-medium">AI Suggested Platform: </span>
+                    {getPlatformName(item.ai_suggested_platform)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium">Reason: </span>
+                    {item.suggestion_reason}
+                  </p>
+                </div>
               )}
+
+              <div className="flex items-center space-x-4">
+                {!item.classification && (
+                  <Button onClick={() => handleClassifyItem(item)} disabled={processingItems.has(item.id)} size="sm">
+                    {processingItems.has(item.id) ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Classifying...
+                      </>
+                    ) : (
+                      "Classify with AI"
+                    )}
+                  </Button>
+                )}
+
+                {item.ai_classification && (
+                  <div className="flex items-center space-x-2">
+                    <Label htmlFor={`final-platform-${item.id}`} className="text-sm">
+                      Final Platform:
+                    </Label>
+                    <Select
+                      value={item.final_platform_choice || ""}
+                      onValueChange={(value) => onFinalPlatformChange(item.id, value)}
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select final platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {resalePlatforms.map((platform) => (
+                          <SelectItem key={platform} value={platform}>
+                            {platform}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
             </Card>
           ))}
         </div>

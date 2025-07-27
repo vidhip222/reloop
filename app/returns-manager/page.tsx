@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DollarSign, Package, XCircle, Clock, Loader2 } from "lucide-react"
+import { DollarSign, Package, XCircle, Clock, Loader2, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Header } from "@/components/layout/header"
-import { AddReturnForm } from "@/components/returns/add-return-form" // Import the form
+import { AddReturnForm } from "@/components/returns/add-return-form"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { exportToCsv } from "@/lib/csv-export"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface ReturnItem {
   id: string
@@ -18,13 +21,16 @@ interface ReturnItem {
   product_name: string
   return_reason: string
   condition: string
-  ai_classification: "relist" | "outlet" | "resale" | "discard" | "manual_review" | null
+  ai_classification: "relist" | "outlet" | "marketplace" | "discard" | "manual_review" | null
   confidence_score: number | null
   status: "pending" | "approved" | "denied" | "processed" | "flagged"
   refund_amount: number | null
   ai_reasoning: string | null
   images: string[]
   created_at: string
+  ai_suggested_platform?: string | null // New field
+  suggestion_reason?: string | null // New field
+  final_platform_choice?: string | null // New field
 }
 
 interface ResaleItem {
@@ -50,7 +56,7 @@ interface ReturnAnalytics {
   classification_breakdown: {
     relist: number
     outlet: number
-    resale: number
+    marketplace: number
     discard: number
     manual_review: number
     pending: number // Added pending for items not yet classified
@@ -69,7 +75,10 @@ export default function ReturnsManagerPage() {
   const [analytics, setAnalytics] = useState<ReturnAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
   const [processingReturnId, setProcessingReturnId] = useState<string | null>(null)
-  const [showAddReturnForm, setShowAddReturnForm] = useState(false) // State for showing the form
+  const [showAddReturnForm, setShowAddReturnForm] = useState(false)
+  const [showDeleteReturnConfirm, setShowDeleteReturnConfirm] = useState(false)
+  const [returnItemToDelete, setReturnItemToDelete] = useState<string | null>(null)
+  const [simulatingSync, setSimulatingSync] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -186,14 +195,131 @@ export default function ReturnsManagerPage() {
     }
   }
 
+  const handleDeleteReturnItem = async () => {
+    if (!returnItemToDelete) return
+
+    try {
+      const response = await fetch(`/api/returns/${returnItemToDelete}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Return item deleted successfully.",
+        })
+        fetchData()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      }
+    } catch (error) {
+      console.error("Error deleting return item:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete return item.",
+        variant: "destructive",
+      })
+    } finally {
+      setShowDeleteReturnConfirm(false)
+      setReturnItemToDelete(null)
+    }
+  }
+
+  const handleExportReturns = () => {
+    if (returnItems.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No return items to export.",
+      })
+      return
+    }
+    const fields = [
+      "id",
+      "order_id",
+      "product_name",
+      "return_reason",
+      "condition",
+      "ai_classification",
+      "ai_suggested_platform",
+      "final_platform_choice",
+      "eligibility_status",
+      "refund_amount",
+      "created_at",
+    ]
+    exportToCsv(returnItems, "returns_export", fields)
+    toast({
+      title: "Export Successful",
+      description: "Return items exported to CSV.",
+    })
+  }
+
+  const handleSimulateSync = async () => {
+    setSimulatingSync(true)
+    try {
+      const response = await fetch("/api/marketplace-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Sync Simulated",
+          description: "Marketplace sync simulation complete. Data refreshed.",
+        })
+        fetchData()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      }
+    } catch (error: any) {
+      console.error("Error simulating sync:", error)
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Failed to simulate marketplace sync.",
+        variant: "destructive",
+      })
+    } finally {
+      setSimulatingSync(false)
+    }
+  }
+
+  const handleFinalPlatformChange = async (itemId: string, newPlatform: string) => {
+    try {
+      const response = await fetch(`/api/returns/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ final_platform_choice: newPlatform }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Platform Updated",
+          description: `Final platform for ${itemId.substring(0, 8)}... set to ${newPlatform}.`,
+        })
+        fetchData() // Refresh data to show updated value
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      }
+    } catch (error: any) {
+      console.error("Error updating final platform:", error)
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update final platform.",
+        variant: "destructive",
+      })
+    }
+  }
+
   const getClassificationBadge = (classification: string | null) => {
     switch (classification) {
       case "relist":
         return <Badge className="bg-green-100 text-green-800">Relist</Badge>
       case "outlet":
         return <Badge className="bg-blue-100 text-blue-800">Outlet</Badge>
-      case "resale":
-        return <Badge className="bg-purple-100 text-purple-800">Resale</Badge>
+      case "marketplace":
+        return <Badge className="bg-purple-100 text-purple-800">Marketplace</Badge>
       case "discard":
         return <Badge className="bg-red-100 text-red-800">Discard</Badge>
       case "manual_review":
@@ -220,6 +346,19 @@ export default function ReturnsManagerPage() {
     }
   }
 
+  const resalePlatforms = [
+    "eBay",
+    "Poshmark",
+    "TheRealReal",
+    "Mercari",
+    "Facebook Marketplace",
+    "ThredUp",
+    "Depop",
+    "Outlet Store",
+    "Donate",
+    "Recycle",
+  ]
+
   if (showAddReturnForm) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -240,7 +379,15 @@ export default function ReturnsManagerPage() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Returns & Resale Manager</h1>
             <p className="text-gray-600">Turn returns into revenue with smart recovery decisions.</p>
           </div>
-          <Button onClick={() => setShowAddReturnForm(true)}>Add Return Item</Button>
+          <div className="flex space-x-2">
+            <Button onClick={handleExportReturns} variant="outline">
+              Export CSV
+            </Button>
+            <Button onClick={handleSimulateSync} disabled={simulatingSync}>
+              {simulatingSync ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Simulate Marketplace Sync"}
+            </Button>
+            <Button onClick={() => setShowAddReturnForm(true)}>Add Return Item</Button>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
@@ -314,6 +461,8 @@ export default function ReturnsManagerPage() {
                         <TableHead>Reason</TableHead>
                         <TableHead>Condition</TableHead>
                         <TableHead>AI Classification</TableHead>
+                        <TableHead>AI Suggestion</TableHead>
+                        <TableHead>Final Platform</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -333,8 +482,36 @@ export default function ReturnsManagerPage() {
                                 <Badge variant="outline">N/A</Badge>
                               )}
                             </TableCell>
-                            <TableCell>{getReturnStatusBadge(item.status)}</TableCell>
                             <TableCell>
+                              {item.ai_suggested_platform ? (
+                                <div className="text-sm">
+                                  <p className="font-medium">{item.ai_suggested_platform}</p>
+                                  <p className="text-muted-foreground text-xs">{item.suggestion_reason}</p>
+                                </div>
+                              ) : (
+                                "N/A"
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={item.final_platform_choice || ""}
+                                onValueChange={(value) => handleFinalPlatformChange(item.id, value)}
+                                disabled={!item.ai_classification} // Disable if not yet classified by AI
+                              >
+                                <SelectTrigger className="w-[180px]">
+                                  <SelectValue placeholder="Select platform" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {resalePlatforms.map((platform) => (
+                                    <SelectItem key={platform} value={platform}>
+                                      {platform}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>{getReturnStatusBadge(item.status)}</TableCell>
+                            <TableCell className="flex space-x-2">
                               {item.status === "pending" && (
                                 <Button
                                   size="sm"
@@ -353,12 +530,22 @@ export default function ReturnsManagerPage() {
                                   Processed
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  setReturnItemToDelete(item.id)
+                                  setShowDeleteReturnConfirm(true)
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground py-4">
+                          <TableCell colSpan={9} className="text-center text-muted-foreground py-4">
                             No return items awaiting classification.
                           </TableCell>
                         </TableRow>
@@ -489,6 +676,14 @@ export default function ReturnsManagerPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <ConfirmationDialog
+        isOpen={showDeleteReturnConfirm}
+        onClose={() => setShowDeleteReturnConfirm(false)}
+        onConfirm={handleDeleteReturnItem}
+        title="Confirm Deletion"
+        description="Are you sure you want to delete this return item? This action cannot be undone."
+      />
     </div>
   )
 }

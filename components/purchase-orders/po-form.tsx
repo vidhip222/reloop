@@ -21,6 +21,7 @@ interface POItem {
 
 interface POFormData {
   supplierId: string
+  buyerId?: string // Optional buyer ID
   subject: string
   items: POItem[]
   negotiationTerms: string
@@ -34,14 +35,20 @@ interface Supplier {
   sla_rating: number
 }
 
+interface Buyer {
+  id: string
+  name: string
+}
+
 interface POFormProps {
   suppliers: Supplier[]
+  buyers: Buyer[] // Pass buyers to the form
   onSubmit: (data: POFormData) => void
   onCancel: () => void
   initialSupplierId?: string
 }
 
-export function POForm({ suppliers, onSubmit, onCancel, initialSupplierId }: POFormProps) {
+export function POForm({ suppliers, buyers, onSubmit, onCancel, initialSupplierId }: POFormProps) {
   const [isGeneratingTerms, setIsGeneratingTerms] = useState(false)
   const {
     register,
@@ -52,7 +59,8 @@ export function POForm({ suppliers, onSubmit, onCancel, initialSupplierId }: POF
     formState: { errors },
   } = useForm<POFormData>({
     defaultValues: {
-      supplierId: initialSupplierId || "",
+      supplierId: initialSupplierId || "defaultSupplierId", // Updated default value
+      buyerId: "", // Default empty
       subject: "",
       items: [{ sku: "", name: "", quantity: 1, price: 0 }],
       negotiationTerms: "",
@@ -65,6 +73,7 @@ export function POForm({ suppliers, onSubmit, onCancel, initialSupplierId }: POF
   })
 
   const watchedSupplierId = watch("supplierId")
+  const watchedBuyerId = watch("buyerId")
   const watchedItems = watch("items")
 
   const selectedSupplier = suppliers.find((s) => s.id === watchedSupplierId)
@@ -122,14 +131,31 @@ export function POForm({ suppliers, onSubmit, onCancel, initialSupplierId }: POF
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="subject">Subject</Label>
-              <Input
-                id="subject"
-                placeholder="PO Subject"
-                {...register("subject", { required: "Subject is required" })}
-              />
-              {errors.subject && <p className="text-sm text-red-600">{errors.subject.message}</p>}
+              <Label htmlFor="buyerId">Buyer (Optional)</Label>
+              <Select value={watchedBuyerId} onValueChange={(value) => setValue("buyerId", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select buyer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {buyers.map((buyer) => (
+                    <SelectItem key={buyer.id} value={buyer.id}>
+                      {buyer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="subject">Subject</Label>
+            <Input
+              id="subject"
+              placeholder="PO Subject"
+              {...register("subject", { required: "Subject is required" })}
+            />
+            {errors.subject && <p className="text-sm text-red-600">{errors.subject.message}</p>}
           </div>
 
           {selectedSupplier && (

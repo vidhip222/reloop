@@ -7,16 +7,17 @@ import { StatsCards } from "@/components/dashboard/stats-cards"
 import { POForm } from "@/components/purchase-orders/po-form"
 import { AddReturnForm } from "@/components/returns/add-return-form"
 import { AddSupplierForm } from "@/components/suppliers/add-supplier-form"
-import { AddBuyerForm } from "@/components/buyers/add-buyer-form"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Users, ShoppingCart, Loader2 } from "lucide-react"
+import { Plus, Users, ShoppingCart, Loader2, Trash2 } from "lucide-react"
 import { mockAnalytics } from "@/lib/mock-data"
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/hooks/use-toast"
 import { getCurrentUser } from "@/lib/auth"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import Link from "next/link"
 
 export default function DashboardPage() {
   const [suppliers, setSuppliers] = useState([])
@@ -26,8 +27,9 @@ export default function DashboardPage() {
   const [showPOForm, setShowPOForm] = useState(false)
   const [showReturnForm, setShowReturnForm] = useState(false)
   const [showSupplierForm, setShowSupplierForm] = useState(false)
-  const [showBuyerForm, setShowBuyerForm] = useState(false)
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>()
+  const [showDeleteSupplierConfirm, setShowDeleteSupplierConfirm] = useState(false)
+  const [supplierToDelete, setSupplierToDelete] = useState<string | null>(null)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -53,10 +55,9 @@ export default function DashboardPage() {
         .order("sla_rating", { ascending: false })
 
       const { data: buyersData } = await supabase.from("buyers").select("*").order("created_at", { ascending: false })
-
       const { data: poData } = await supabase
         .from("purchase_orders")
-        .select("*, suppliers(name)")
+        .select("*, suppliers(name), buyers(name)") // Select buyer name too
         .order("created_at", { ascending: false })
 
       setSuppliers(suppliersData || [])
@@ -83,6 +84,7 @@ export default function DashboardPage() {
       const { error } = await supabase.from("purchase_orders").insert({
         po_number: poNumber,
         supplier_id: data.supplierId,
+        buyer_id: data.buyerId || null, // Add buyerId
         subject: data.subject,
         items: data.items,
         negotiation_terms: data.negotiationTerms,
@@ -177,31 +179,31 @@ export default function DashboardPage() {
     }
   }
 
-  const handleBuyerSubmit = async (data: any) => {
+  const handleDeleteSupplier = async () => {
+    if (!supplierToDelete) return
+
     try {
-      const { error } = await supabase.from("buyers").insert({
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        company: data.company,
-        region: data.region,
+      const { error } = await fetch(`/api/suppliers/${supplierToDelete}`, {
+        method: "DELETE",
       })
 
       if (error) throw error
 
       toast({
         title: "Success",
-        description: "Buyer added successfully",
+        description: "Supplier deleted successfully.",
       })
-
-      setShowBuyerForm(false)
       loadData()
     } catch (error) {
+      console.error("Error deleting supplier:", error)
       toast({
         title: "Error",
-        description: "Failed to add buyer",
+        description: "Failed to delete supplier.",
         variant: "destructive",
       })
+    } finally {
+      setShowDeleteSupplierConfirm(false)
+      setSupplierToDelete(null)
     }
   }
 
@@ -237,6 +239,7 @@ export default function DashboardPage() {
         <div className="p-6">
           <POForm
             suppliers={suppliers}
+            buyers={buyers} // Pass buyers to POForm
             onSubmit={handlePOSubmit}
             onCancel={() => setShowPOForm(false)}
             initialSupplierId={selectedSupplierId}
@@ -268,17 +271,6 @@ export default function DashboardPage() {
     )
   }
 
-  if (showBuyerForm) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="p-6">
-          <AddBuyerForm onSubmit={handleBuyerSubmit} onCancel={() => setShowBuyerForm(false)} />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -290,10 +282,6 @@ export default function DashboardPage() {
             <Button onClick={() => setShowSupplierForm(true)} size="sm">
               <Plus className="h-4 w-4 mr-2" />
               Add Supplier
-            </Button>
-            <Button onClick={() => setShowBuyerForm(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Buyer
             </Button>
             <Button onClick={() => setShowReturnForm(true)} size="sm">
               <Plus className="h-4 w-4 mr-2" />
@@ -339,9 +327,21 @@ export default function DashboardPage() {
                           <span>SLA: {supplier.sla_rating}/5</span>
                         </div>
                       </div>
-                      <Button size="sm" onClick={() => handleCreatePO(supplier.id)}>
-                        Create PO
-                      </Button>
+                      <div className="flex space-x-2">
+                        <Button size="sm" onClick={() => handleCreatePO(supplier.id)}>
+                          Create PO
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setSupplierToDelete(supplier.id)
+                            setShowDeleteSupplierConfirm(true)
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -366,10 +366,14 @@ export default function DashboardPage() {
                         <p className="text-sm text-muted-foreground">{po.subject}</p>
                         <div className="flex items-center space-x-4 mt-1 text-xs text-muted-foreground">
                           <span>Supplier: {po.suppliers?.name}</span>
+                          <span>Buyer: {po.buyers?.name || "N/A"}</span>
                           <span>Total: ${po.total_amount?.toFixed(2)}</span>
                           <span>Items: {po.items_count}</span>
                         </div>
                       </div>
+                      <Button size="sm" asChild>
+                        <Link href={`/purchase-orders/${po.id}`}>View Details</Link>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -378,6 +382,14 @@ export default function DashboardPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <ConfirmationDialog
+        isOpen={showDeleteSupplierConfirm}
+        onClose={() => setShowDeleteSupplierConfirm(false)}
+        onConfirm={handleDeleteSupplier}
+        title="Confirm Deletion"
+        description="Are you sure you want to delete this supplier? This action cannot be undone."
+      />
     </div>
   )
 }

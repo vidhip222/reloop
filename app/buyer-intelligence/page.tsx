@@ -109,13 +109,25 @@ export default function BuyerIntelligencePage() {
     }
   }
 
-  const generatePurchaseOrder = async (recommendationId: string) => {
+  const generatePurchaseOrder = async (
+    recommendationId: string,
+    productId: string,
+    productName: string,
+    recommendedQuantity: number,
+    supplierId: string,
+  ) => {
     setGeneratingPO(true)
     try {
       const response = await fetch("/api/purchase-orders/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recommendation_id: recommendationId }),
+        body: JSON.stringify({
+          recommendation_id: recommendationId, // Keep for context if needed by API
+          product_id: productId,
+          product_name: productName,
+          recommended_quantity: recommendedQuantity,
+          supplier_id: supplierId,
+        }),
       })
 
       if (response.ok) {
@@ -284,7 +296,15 @@ export default function BuyerIntelligencePage() {
                             <TableCell>
                               <Button
                                 size="sm"
-                                onClick={() => generatePurchaseOrder(rec.id)}
+                                onClick={() =>
+                                  generatePurchaseOrder(
+                                    rec.id,
+                                    rec.product_id,
+                                    rec.product_name,
+                                    rec.recommended_quantity,
+                                    rec.supplier_id,
+                                  )
+                                }
                                 disabled={generatingPO || rec.status !== "active"}
                               >
                                 {generatingPO ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Generate PO"}

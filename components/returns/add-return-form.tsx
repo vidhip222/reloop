@@ -107,6 +107,7 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
             <div className="space-y-2">
               <Label htmlFor="returnReason">Return Reason</Label>
               <Select
+                value={watch("returnReason")}
                 onValueChange={(value) => setValue("returnReason", value)}
                 {...register("returnReason", { required: "Return reason is required" })}
               >
@@ -127,6 +128,7 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
               <Select
+                value={watch("category")}
                 onValueChange={(value) => setValue("category", value)}
                 {...register("category", { required: "Category is required" })}
               >
@@ -158,6 +160,7 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
             <div className="space-y-2">
               <Label htmlFor="condition">Condition</Label>
               <Select
+                value={watch("condition")}
                 onValueChange={(value) => setValue("condition", value)}
                 {...register("condition", { required: "Condition is required" })}
               >
