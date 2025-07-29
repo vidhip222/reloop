@@ -1,88 +1,110 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Star, Clock, MapPin } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Progress } from "@/components/ui/progress"
+import { Loader2 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { mockSuppliers } from "@/lib/mock-data"
 
 interface Supplier {
   id: string
   name: string
-  email: string
-  deliverySpeed: number
-  priceRating: number
-  slaRating: number
-  region: string
-  status: string
+  rating: number
+  avg_delivery_days: number
+  price_competitiveness: number
+  reliability_score: number
+  total_orders: number
 }
 
-interface SupplierRankingProps {
-  suppliers: Supplier[]
-  onCreatePO: (supplierId: string) => void
-}
+export function SupplierRanking() {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
-export function SupplierRanking({ suppliers, onCreatePO }: SupplierRankingProps) {
-  const getRatingStars = (rating: number) => {
-    return Array.from({ length: 5 }, (_, i) => (
-      <Star
-        key={i}
-        className={`h-4 w-4 ${i < Math.floor(rating) ? "text-yellow-400 fill-current" : "text-gray-300"}`}
-      />
-    ))
-  }
+  useEffect(() => {
+    fetchSuppliers()
+  }, [])
 
-  const getDeliveryBadge = (days: number) => {
-    if (days <= 5) return <Badge className="bg-green-100 text-green-800">Fast</Badge>
-    if (days <= 10) return <Badge variant="secondary">Standard</Badge>
-    return <Badge variant="outline">Slow</Badge>
+  const fetchSuppliers = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/suppliers")
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      setSuppliers(data)
+    } catch (error: any) {
+      console.error("Error fetching suppliers:", error)
+      toast({
+        title: "Data Load Error",
+        description: `Failed to load suppliers. ${error.message}`,
+        variant: "destructive",
+      })
+      setSuppliers(mockSuppliers) // Fallback to mock data
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Supplier Ranking</CardTitle>
+        <CardTitle>Supplier Performance Rankings</CardTitle>
+        <CardDescription>Compare suppliers based on pricing, delivery, and reliability.</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {suppliers.map((supplier, index) => (
-            <div key={supplier.id} className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-bold">
-                  {index + 1}
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-medium">{supplier.name}</h4>
-                  <div className="flex items-center space-x-4 mt-1 text-sm text-muted-foreground">
-                    <div className="flex items-center space-x-1">
-                      <MapPin className="h-3 w-3" />
-                      <span>{supplier.region}</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <Clock className="h-3 w-3" />
-                      <span>{supplier.deliverySpeed} days</span>
-                      {getDeliveryBadge(supplier.deliverySpeed)}
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-4 mt-2">
-                    <div className="flex items-center space-x-1">
-                      <span className="text-xs">Price:</span>
-                      <div className="flex">{getRatingStars(supplier.priceRating)}</div>
-                      <span className="text-xs">({supplier.priceRating})</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <span className="text-xs">SLA:</span>
-                      <div className="flex">{getRatingStars(supplier.slaRating)}</div>
-                      <span className="text-xs">({supplier.slaRating})</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <Button size="sm" onClick={() => onCreatePO(supplier.id)}>
-                Create PO
-              </Button>
-            </div>
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center h-40">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Rating</TableHead>
+                <TableHead>Avg Delivery</TableHead>
+                <TableHead>Price Competitiveness</TableHead>
+                <TableHead>Reliability</TableHead>
+                <TableHead>Total Orders</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {suppliers.length > 0 ? (
+                suppliers
+                  .sort((a, b) => b.rating - a.rating) // Sort by rating descending
+                  .map((supplier) => (
+                    <TableRow key={supplier.id}>
+                      <TableCell className="font-medium">{supplier.name}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-1">
+                          <span>{supplier.rating.toFixed(1)}</span>
+                          <span className="text-yellow-500">★</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{supplier.avg_delivery_days} days</TableCell>
+                      <TableCell>
+                        <Progress value={supplier.price_competitiveness} className="w-16" />
+                      </TableCell>
+                      <TableCell>
+                        <Progress value={supplier.reliability_score} className="w-16" />
+                      </TableCell>
+                      <TableCell>{supplier.total_orders}</TableCell>
+                    </TableRow>
+                  ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
+                    No suppliers available.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
       </CardContent>
     </Card>
   )

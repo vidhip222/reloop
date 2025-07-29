@@ -1,172 +1,214 @@
--- Drop tables if they exist to ensure a clean slate for schema updates
-DROP TABLE IF EXISTS public.user_settings CASCADE;
-DROP TABLE IF EXISTS public.resale_items CASCADE;
-DROP TABLE IF EXISTS public.return_items CASCADE;
-DROP TABLE IF EXISTS public.purchase_orders CASCADE;
-DROP TABLE IF EXISTS public.buyers CASCADE;
-DROP TABLE IF EXISTS public.suppliers CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
+-- Drop existing tables if they exist to ensure a clean slate
+DROP TABLE IF EXISTS return_items CASCADE;
+DROP TABLE IF EXISTS purchase_orders CASCADE;
+DROP TABLE IF EXISTS products CASCADE;
+DROP TABLE IF EXISTS suppliers CASCADE;
+DROP TABLE IF EXISTS buyers CASCADE;
+DROP TABLE IF EXISTS restock_recommendations CASCADE;
 
--- Create users table (extends Supabase auth.users)
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users ON DELETE CASCADE,
-  email TEXT,
-  full_name TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  PRIMARY KEY (id)
+-- Create Suppliers Table
+CREATE TABLE suppliers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    phone VARCHAR(50),
+    address TEXT,
+    region VARCHAR(100),
+    avg_delivery_days INT,
+    price_rating INT CHECK (price_rating >= 1 AND price_rating <= 5),
+    sla_rating INT CHECK (sla_rating >= 1 AND sla_rating <= 5),
+    rating NUMERIC(3, 1), -- Overall rating, e.g., average of price and SLA
+    price_competitiveness INT, -- Mock score 0-100
+    reliability_score INT, -- Mock score 0-100
+    total_orders INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create suppliers table
-CREATE TABLE IF NOT EXISTS public.suppliers (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  owner_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NULL,
-  name TEXT NOT NULL,
-  email TEXT,
-  phone TEXT,
-  address TEXT,
-  avg_delivery_days INTEGER, -- Renamed from delivery_speed
-  price_rating DECIMAL(3,2),
-  sla_rating DECIMAL(3,2),
-  region TEXT,
-  status TEXT DEFAULT 'active',
-  rating DECIMAL(3,2), -- New: overall rating
-  price_competitiveness INTEGER, -- New: 0-100
-  reliability_score INTEGER, -- New: 0-100
-  total_orders INTEGER DEFAULT 0, -- New: total orders placed with this supplier
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Create Buyers Table
+CREATE TABLE buyers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    phone VARCHAR(50),
+    address TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create buyers table
-CREATE TABLE IF NOT EXISTS public.buyers (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  owner_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NULL,
-  name TEXT NOT NULL,
-  email TEXT,
-  phone TEXT,
-  company TEXT,
-  region TEXT,
-  status TEXT DEFAULT 'active',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Create Products Table
+CREATE TABLE products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price NUMERIC(10, 2) NOT NULL,
+    category VARCHAR(100),
+    sku VARCHAR(100) UNIQUE NOT NULL,
+    stock_quantity INT DEFAULT 0,
+    supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create purchase_orders table
-CREATE TABLE IF NOT EXISTS public.purchase_orders (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  owner_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NULL,
-  supplier_id UUID REFERENCES public.suppliers(id),
-  buyer_id UUID REFERENCES public.buyers(id) ON DELETE SET NULL, -- New: Link to buyers table
-  po_number TEXT UNIQUE NOT NULL,
-  subject TEXT,
-  status TEXT DEFAULT 'draft', -- draft, sent, confirmed, delivered, received, cancelled
-  total_amount DECIMAL(10,2),
-  items JSONB, -- array of {sku, name, quantity, price}
-  items_count INTEGER DEFAULT 0, -- New: count of items in the order
-  negotiation_terms TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  po_sent_at TIMESTAMP WITH TIME ZONE NULL, -- New: Timestamp when PO was sent via email
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Create Purchase Orders Table
+CREATE TABLE purchase_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    po_number VARCHAR(100) UNIQUE NOT NULL,
+    supplier_id UUID REFERENCES suppliers(id) ON DELETE RESTRICT,
+    buyer_id UUID REFERENCES buyers(id) ON DELETE SET NULL, -- New: Link to buyers
+    subject VARCHAR(255) NOT NULL,
+    items JSONB NOT NULL, -- Array of {product_id, product_name, quantity, unit_price}
+    items_count INT NOT NULL DEFAULT 0, -- New: Count of items
+    total_amount NUMERIC(10, 2) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'draft', -- e.g., 'draft', 'sent', 'confirmed', 'received', 'cancelled'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP WITH TIME ZONE, -- New: When the PO was sent
+    expected_delivery_date TIMESTAMP WITH TIME ZONE, -- New: Expected delivery date
+    negotiation_terms TEXT -- New: AI-generated or custom negotiation terms
 );
 
--- Create return_items table
-CREATE TABLE IF NOT EXISTS public.return_items (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  owner_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NULL,
-  order_id TEXT, -- New: original order ID
-  product_id TEXT, -- Renamed from sku
-  product_name TEXT NOT NULL,
-  return_reason TEXT,
-  purchase_date DATE,
-  category TEXT,
-  image_url TEXT, -- Kept for single image, but images array is better
-  images TEXT[], -- New: array of image URLs
-  notes TEXT,
-  condition TEXT, -- New: e.g., 'new', 'excellent', 'good', 'fair', 'poor'
-  ai_classification TEXT, -- Renamed from classification
-  confidence_score DECIMAL(3,2), -- New: AI confidence score
-  resale_platform TEXT,
-  eligibility_status TEXT DEFAULT 'pending', -- eligible, flagged, denied
-  refund_status TEXT DEFAULT 'pending', -- pending, processed, failed
-  refund_amount DECIMAL(10,2),
-  ai_reasoning TEXT,
-  ai_suggested_platform TEXT, -- New: AI's suggested resale platform
-  suggestion_reason TEXT, -- New: AI's reasoning for the suggestion
-  final_platform_choice TEXT, -- New: Manual override for final platform
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Create Return Items Table
+CREATE TABLE return_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id VARCHAR(255) NOT NULL, -- Original sales order ID
+    product_id VARCHAR(255) NOT NULL, -- SKU or internal product ID
+    product_name VARCHAR(255) NOT NULL,
+    return_reason TEXT NOT NULL,
+    purchase_date DATE NOT NULL,
+    category VARCHAR(100),
+    notes TEXT,
+    condition VARCHAR(50) NOT NULL, -- e.g., 'new', 'used', 'damaged', 'refurbished'
+    images TEXT[], -- Array of image URLs
+    eligibility_status VARCHAR(50) NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    classification_ai TEXT, -- AI-generated classification (e.g., 'Resalable', 'Refurbishable', 'Parts Only', 'Discard')
+    resale_platform_ai TEXT, -- AI-suggested resale platform
+    synced_to_marketplace BOOLEAN DEFAULT FALSE, -- New: Track if synced to a resale marketplace
+    marketplace_platform VARCHAR(100), -- New: Name of the marketplace platform
+    synced_at TIMESTAMP WITH TIME ZONE, -- New: Timestamp of sync
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create resale_items table (New table)
-CREATE TABLE IF NOT EXISTS public.resale_items (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  return_item_id UUID REFERENCES public.return_items(id) ON DELETE CASCADE,
-  product_name TEXT NOT NULL,
-  platform TEXT NOT NULL, -- eBay, Poshmark, TheRealReal, etc.
-  listing_price DECIMAL(10,2),
-  current_status TEXT DEFAULT 'listed', -- listed, sold, pending, removed
-  sold_price DECIMAL(10,2) NULL,
-  profit_margin DECIMAL(5,2) NULL, -- Calculated margin
-  platform_listing_id TEXT NULL,
-  listed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  sold_at TIMESTAMP WITH TIME ZONE NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Create Restock Recommendations Table
+CREATE TABLE restock_recommendations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id VARCHAR(255) NOT NULL,
+    product_name VARCHAR(255) NOT NULL,
+    current_stock INT NOT NULL,
+    recommended_quantity INT NOT NULL,
+    confidence_score NUMERIC(3, 2) NOT NULL, -- 0.00 to 1.00
+    urgency VARCHAR(50) NOT NULL, -- 'low', 'medium', 'high'
+    predicted_stockout_date TIMESTAMP WITH TIME ZONE,
+    supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
+    supplier_name VARCHAR(255),
+    ai_reasoning TEXT,
+    status VARCHAR(50) DEFAULT 'active', -- e.g., 'active', 'po_generated', 'dismissed'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create user_settings table
-CREATE TABLE IF NOT EXISTS public.user_settings (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  owner_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE UNIQUE NULL,
-  supplier_email TEXT,
-  default_po_subject TEXT,
-  ebay_api_token TEXT,
-  default_markup_percent DECIMAL(5,2),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- Add RLS policies for all tables
+ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE buyers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE purchase_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE return_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE restock_recommendations ENABLE ROW LEVEL SECURITY;
 
--- Enable Row Level Security
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.buyers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.return_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.resale_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
+-- Policies for suppliers table
+CREATE POLICY "Public suppliers are viewable by all users."
+  ON suppliers FOR SELECT
+  USING (true);
 
--- Create policies for profiles
-CREATE POLICY "Users can view own profile" ON public.profiles
-  FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON public.profiles
-  FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can insert own profile" ON public.profiles
-  FOR INSERT WITH CHECK (auth.uid() = id);
+-- Policies for buyers table
+CREATE POLICY "Public buyers are viewable by all users."
+  ON buyers FOR SELECT
+  USING (true);
 
--- Policies for tables with nullable owner_id:
--- Allow users to manage their own data, and allow anonymous access for seeded data (if owner_id is null)
-CREATE POLICY "Users can manage own suppliers or view unassigned" ON public.suppliers
-  FOR ALL USING (auth.uid() = owner_id OR owner_id IS NULL);
+-- Policies for products table
+CREATE POLICY "Public products are viewable by all users."
+  ON products FOR SELECT
+  USING (true);
 
-CREATE POLICY "Users can manage own buyers or view unassigned" ON public.buyers
-  FOR ALL USING (auth.uid() = owner_id OR owner_id IS NULL);
+-- Policies for purchase_orders table
+CREATE POLICY "Public purchase_orders are viewable by all users."
+  ON purchase_orders FOR SELECT
+  USING (true);
 
-CREATE POLICY "Users can manage own purchase orders or view unassigned" ON public.purchase_orders
-  FOR ALL USING (auth.uid() = owner_id OR owner_id IS NULL);
+-- Policies for return_items table
+CREATE POLICY "Public return_items are viewable by all users."
+  ON return_items FOR SELECT
+  USING (true);
 
-CREATE POLICY "Users can manage own return items or view unassigned" ON public.return_items
-  FOR ALL USING (auth.uid() = owner_id OR owner_id IS NULL);
+-- Policies for restock_recommendations table
+CREATE POLICY "Public restock_recommendations are viewable by all users."
+  ON restock_recommendations FOR SELECT
+  USING (true);
 
--- Updated policy for resale_items using ownership from linked return_items
-CREATE POLICY "Users can manage resale items linked to their return items" ON public.resale_items
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.return_items ri
-      WHERE ri.id = resale_items.return_item_id
-        AND (ri.owner_id = auth.uid() OR ri.owner_id IS NULL)
-    )
-  );
+-- Enable insert/update/delete for authenticated users (adjust as needed for specific roles)
+CREATE POLICY "Authenticated users can insert suppliers."
+  ON suppliers FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
 
-CREATE POLICY "Users can manage own settings or view unassigned" ON public.user_settings
-  FOR ALL USING (auth.uid() = owner_id OR owner_id IS NULL);
+CREATE POLICY "Authenticated users can update suppliers."
+  ON suppliers FOR UPDATE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can delete suppliers."
+  ON suppliers FOR DELETE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can insert buyers."
+  ON buyers FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update buyers."
+  ON buyers FOR UPDATE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can delete buyers."
+  ON buyers FOR DELETE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can insert products."
+  ON products FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update products."
+  ON products FOR UPDATE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can delete products."
+  ON products FOR DELETE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can insert purchase_orders."
+  ON purchase_orders FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update purchase_orders."
+  ON purchase_orders FOR UPDATE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can delete purchase_orders."
+  ON purchase_orders FOR DELETE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can insert return_items."
+  ON return_items FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update return_items."
+  ON return_items FOR UPDATE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can delete return_items."
+  ON return_items FOR DELETE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can insert restock_recommendations."
+  ON restock_recommendations FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update restock_recommendations."
+  ON restock_recommendations FOR UPDATE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can delete restock_recommendations."
+  ON restock_recommendations FOR DELETE
+  USING (auth.role() = 'authenticated');

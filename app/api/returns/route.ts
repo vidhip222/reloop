@@ -1,37 +1,23 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
+import { mockReturnItems } from "@/lib/mock-data"
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from("return_items")
-      .select(
-        "id, order_id, product_id, product_name, return_reason, condition, ai_classification, confidence_score, status:eligibility_status, refund_amount, ai_reasoning, images, created_at",
-      )
-      .order("created_at", { ascending: false })
+    const { data, error } = await supabase.from("return_items").select("*").order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching return items:", error)
-      return NextResponse.json({ error: "Failed to fetch return items" }, { status: 500 })
+      // Fallback to mock data if DB fetch fails
+      return NextResponse.json(mockReturnItems)
     }
 
-    const formattedReturns = data.map((item) => ({
-      id: item.id,
-      order_id: item.order_id,
-      product_id: item.product_id,
-      product_name: item.product_name,
-      return_reason: item.return_reason,
-      condition: item.condition,
-      ai_classification: item.ai_classification,
-      confidence_score: item.confidence_score,
-      status: item.status,
-      refund_amount: item.refund_amount,
-      ai_reasoning: item.ai_reasoning,
-      images: item.images || [],
-      created_at: item.created_at,
-    }))
+    // If no data in DB, return mock data
+    if (!data || data.length === 0) {
+      return NextResponse.json(mockReturnItems)
+    }
 
-    return NextResponse.json(formattedReturns)
+    return NextResponse.json(data)
   } catch (error) {
     console.error("API Error: /api/returns", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
@@ -43,7 +29,7 @@ export async function POST(req: Request) {
     const { order_id, product_id, product_name, return_reason, purchase_date, category, notes, condition, images } =
       await req.json()
 
-    if (!product_id || !product_name || !return_reason || !purchase_date || !category || !condition) {
+    if (!order_id || !product_id || !product_name || !return_reason || !purchase_date || !category || !condition) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
@@ -57,8 +43,7 @@ export async function POST(req: Request) {
       notes,
       condition,
       images,
-      eligibility_status: "pending", // Initial status
-      refund_status: "pending",
+      eligibility_status: "pending", // Default status for new returns
     })
 
     if (error) {

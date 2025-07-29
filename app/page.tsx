@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardTitle } from "@/components/ui/card"
 import { TrendingUp, RefreshCw } from "lucide-react"
 import { Header } from "@/components/layout/header"
+import { redirect } from "next/navigation"
 
 export default function HomePage() {
+  redirect("/dashboard")
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <Header />

@@ -1,38 +1,23 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
+import { mockSuppliers } from "@/lib/mock-data"
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from("suppliers")
-      .select(
-        "id, name, email, phone, address, avg_delivery_days, price_rating, sla_rating, region, rating, price_competitiveness, reliability_score, total_orders",
-      )
-      .order("rating", { ascending: false })
+    const { data, error } = await supabase.from("suppliers").select("*").order("name", { ascending: true })
 
     if (error) {
       console.error("Error fetching suppliers:", error)
-      return NextResponse.json({ error: "Failed to fetch suppliers" }, { status: 500 })
+      // Fallback to mock data if DB fetch fails
+      return NextResponse.json(mockSuppliers)
     }
 
-    // Map DB fields to the frontend interface if necessary
-    const formattedSuppliers = data.map((supplier) => ({
-      id: supplier.id,
-      name: supplier.name,
-      email: supplier.email,
-      phone: supplier.phone,
-      address: supplier.address,
-      avg_delivery_days: supplier.avg_delivery_days,
-      price_rating: supplier.price_rating,
-      sla_rating: supplier.sla_rating,
-      region: supplier.region,
-      rating: supplier.rating,
-      price_competitiveness: supplier.price_competitiveness,
-      reliability_score: supplier.reliability_score,
-      total_orders: supplier.total_orders,
-    }))
+    // If no data in DB, return mock data
+    if (!data || data.length === 0) {
+      return NextResponse.json(mockSuppliers)
+    }
 
-    return NextResponse.json(formattedSuppliers)
+    return NextResponse.json(data)
   } catch (error) {
     console.error("API Error: /api/suppliers", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

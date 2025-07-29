@@ -1,128 +1,113 @@
-// Mock Gemini API integration for AI-powered features
-export interface GeminiResponse {
-  classification: string
-  reasoning: string
-  confidence: number
-  suggestions?: string[]
-  ai_suggested_platform?: string // New field
-  suggestion_reason?: string // New field
-}
+import { generateText } from "ai"
+import { google } from "@ai-sdk/google"
 
-export async function classifyReturnItem(itemData: {
-  productName: string
-  returnReason: string
-  category: string
-  notes: string
-  imageUrl?: string
-}): Promise<GeminiResponse> {
-  // Mock AI classification logic
-  await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulate API delay
+const GEMINI_MODEL = google("gemini-1.5-flash-latest")
 
-  const { productName, returnReason, category, notes } = itemData
-
-  // Simple rule-based classification for demo
-  let classification = "manual_review" // Changed default to manual_review
-  let reasoning = "Requires manual review"
-  let confidence = 0.7
-  let ai_suggested_platform: string | undefined = undefined
-  let suggestion_reason: string | undefined = undefined
-
-  if (returnReason.toLowerCase().includes("size") && notes.toLowerCase().includes("perfect condition")) {
-    classification = "relist"
-    reasoning = "Item is in perfect condition with only size issues. Ideal for relisting in main store."
-    confidence = 0.95
-    ai_suggested_platform = "Shopify"
-    suggestion_reason = "Perfect condition, high demand for this product type."
-  } else if (returnReason.toLowerCase().includes("defect") && !notes.toLowerCase().includes("significant")) {
-    classification = "outlet"
-    reasoning = "Minor defect makes it suitable for outlet store at reduced price."
-    confidence = 0.85
-    ai_suggested_platform = "Outlet Store"
-    suggestion_reason = "Minor cosmetic defect, suitable for discounted sale."
-  } else if (category === "Accessories" && returnReason.toLowerCase().includes("changed mind")) {
-    classification = "marketplace"
-    reasoning = "High-value accessory in good condition. Best suited for marketplace resale."
-    confidence = 0.8
-    ai_suggested_platform = "TheRealReal"
-    suggestion_reason = "High-value luxury item, best for authenticated marketplaces."
-  } else if (notes.toLowerCase().includes("damage") || notes.toLowerCase().includes("tear")) {
-    classification = "discard"
-    reasoning = "Damage too extensive for resale. Recommend donation or disposal."
-    confidence = 0.9
-    ai_suggested_platform = "Donate"
-    suggestion_reason = "Significant damage, not suitable for resale or outlet."
-  }
-
-  return {
-    classification,
-    reasoning,
-    confidence,
-    ai_suggested_platform,
-    suggestion_reason,
-  }
-}
-
-export async function generatePONegotiationTerms(supplierData: {
+// Mock function for generating PO negotiation terms
+interface GeneratePONegotiationTermsProps {
   name: string
   deliverySpeed: number
   priceRating: number
   slaRating: number
-}): Promise<string> {
-  // Mock AI-generated negotiation terms
-  await new Promise((resolve) => setTimeout(resolve, 800))
-
-  const { name, deliverySpeed, priceRating, slaRating } = supplierData
-
-  const terms = []
-
-  if (deliverySpeed > 10) {
-    terms.push("Request expedited shipping options")
-  }
-
-  if (priceRating < 4.0) {
-    terms.push("Negotiate volume discount for orders over $10,000")
-  }
-
-  if (slaRating > 4.5) {
-    terms.push("Standard payment terms acceptable due to excellent SLA")
-  } else {
-    terms.push("Request performance guarantees and penalties for delays")
-  }
-
-  terms.push("Net 30 payment terms")
-  terms.push("Quality inspection clause")
-
-  return terms.join("; ")
 }
 
-export async function suggestResalePlatform(itemData: {
-  category: string
-  value: number
+export async function generatePONegotiationTerms({
+  name,
+  deliverySpeed,
+  priceRating,
+  slaRating,
+}: GeneratePONegotiationTermsProps): Promise<string> {
+  // In a real application, you would use an AI model here.
+  // For now, we return a mock response based on the supplier's ratings.
+  const prompt = `Generate concise negotiation terms for a purchase order with supplier "${name}".
+  Consider their average delivery speed of ${deliverySpeed} days, price rating of ${priceRating}/5, and SLA rating of ${slaRating}/5.
+  Focus on terms that would be beneficial given these metrics.
+  For example, if delivery is slow, suggest expedited shipping options or penalties. If price rating is low, suggest discounts.
+  Keep it to 2-3 sentences.`
+
+  try {
+    const { text } = await generateText({
+      model: GEMINI_MODEL,
+      prompt: prompt,
+    })
+    return text
+  } catch (error) {
+    console.error("Error generating negotiation terms with AI:", error)
+    // Fallback to a generic mock response if AI call fails
+    return `Standard payment terms (Net 30). Given ${name}'s average delivery of ${deliverySpeed} days, we request timely updates on shipment tracking. We expect quality consistent with their ${slaRating}/5 SLA rating.`
+  }
+}
+
+// Mock function for classifying return items
+interface ClassifyReturnItemProps {
+  productName: string
+  returnReason: string
   condition: string
-}): Promise<{ platform: string; reasoning: string }> {
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  notes: string | null
+}
 
-  const { category, value, condition } = itemData
+export async function classifyReturnItem({
+  productName,
+  returnReason,
+  condition,
+  notes,
+}: ClassifyReturnItemProps): Promise<string> {
+  // In a real application, you would use an AI model here.
+  // For now, we return a mock response.
+  const prompt = `Classify the return of "${productName}" with reason "${returnReason}" and condition "${condition}".
+  Notes: "${notes || "None"}".
+  Suggest one of the following classifications: "Resalable", "Refurbishable", "Parts Only", "Discard".`
 
-  if (value > 200 && (category === "Accessories" || category === "Luxury")) {
-    return {
-      platform: "therealreal",
-      reasoning: "High-value luxury item best suited for authenticated luxury marketplace",
+  try {
+    const { text } = await generateText({
+      model: GEMINI_MODEL,
+      prompt: prompt,
+    })
+    return text
+  } catch (error) {
+    console.error("Error classifying return item with AI:", error)
+    // Fallback to a generic mock response if AI call fails
+    if (condition === "new" && returnReason === "Changed mind") {
+      return "Resalable"
+    } else if (condition === "damaged" || returnReason === "Defective") {
+      return "Refurbishable"
     }
-  } else if (category === "Apparel" && condition === "excellent") {
-    return {
-      platform: "poshmark",
-      reasoning: "Fashion items in excellent condition perform well on Poshmark",
+    return "Discard"
+  }
+}
+
+// Mock function for suggesting resale platforms
+interface SuggestResalePlatformProps {
+  productName: string
+  classification: string
+}
+
+export async function suggestResalePlatform({
+  productName,
+  classification,
+}: SuggestResalePlatformProps): Promise<string> {
+  // In a real application, you would use an AI model here.
+  // For now, we return a mock response.
+  const prompt = `Given the product "${productName}" and its classification "${classification}",
+  suggest the most suitable resale platform.
+  Examples: "Direct-to-consumer website", "Electronics Refurbisher", "Parts Salvage", "Donation Center".`
+
+  try {
+    const { text } = await generateText({
+      model: GEMINI_MODEL, // Using a placeholder model
+      prompt: prompt,
+    })
+    return text
+  } catch (error) {
+    console.error("Error suggesting resale platform with AI:", error)
+    // Fallback to a generic mock response if AI call fails
+    if (classification === "Resalable") {
+      return "Direct-to-consumer website"
+    } else if (classification === "Refurbishable") {
+      return "Specialized Refurbishment Partner"
+    } else if (classification === "Parts Only") {
+      return "Parts Salvage Market"
     }
-  } else if (value < 50) {
-    return {
-      platform: "mercari",
-      reasoning: "Lower-value items have good success rate on Mercari",
-    }
-  } else {
-    return {
-      platform: "ebay",
-      reasoning: "Versatile platform suitable for most item types and price ranges",
-    }
+    return "Recycling Center"
   }
 }

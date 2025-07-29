@@ -59,7 +59,7 @@ export function POForm({ suppliers, buyers, onSubmit, onCancel, initialSupplierI
     formState: { errors },
   } = useForm<POFormData>({
     defaultValues: {
-      supplierId: initialSupplierId || "defaultSupplierId", // Updated default value
+      supplierId: initialSupplierId || "defaultSupplierId", // Updated default value to a non-empty string
       buyerId: "", // Default empty
       subject: "",
       items: [{ sku: "", name: "", quantity: 1, price: 0 }],

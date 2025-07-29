@@ -1,48 +1,59 @@
-export function exportToCsv<T extends Record<string, any>>(
-  data: T[],
-  filenamePrefix: string,
-  fields: (keyof T | { key: keyof T; header: string })[],
-) {
+interface ExportField {
+  key: string
+  header: string
+}
+
+export function exportToCsv<T extends Record<string, any>>(data: T[], fields: ExportField[], filename = "export") {
   if (!data || data.length === 0) {
     console.warn("No data to export.")
     return
   }
 
-  // Determine headers and keys
-  const headers = fields.map((field) => (typeof field === "object" ? field.header : String(field)))
-  const keys = fields.map((field) => (typeof field === "object" ? field.key : field))
-
   // Create CSV header row
-  const csvRows = [headers.join(",")]
+  const header = fields.map((field) => `"${field.header.replace(/"/g, '""')}"`).join(",")
 
   // Create CSV data rows
-  for (const row of data) {
-    const values = keys.map((key) => {
-      let value = row[key]
-      if (value === null || value === undefined) {
-        value = ""
-      } else if (Array.isArray(value)) {
-        value = `"${value.join(";")}"` // Handle arrays by joining with semicolon and quoting
-      } else if (typeof value === "object" && value !== null) {
-        value = `"${JSON.stringify(value).replace(/"/g, '""')}"` // Stringify objects and escape quotes
-      } else if (typeof value === "string") {
-        value = `"${value.replace(/"/g, '""')}"` // Escape double quotes in strings
-      }
-      return value
-    })
-    csvRows.push(values.join(","))
-  }
+  const rows = data.map((row) => {
+    return fields
+      .map((field) => {
+        let value = row[field.key]
+        if (value === null || value === undefined) {
+          value = ""
+        } else if (typeof value === "object" && value !== null) {
+          // Handle nested objects, e.g., supplier.name
+          if (field.key.includes(".")) {
+            const path = field.key.split(".")
+            let nestedValue = row
+            for (const p of path) {
+              nestedValue = nestedValue ? nestedValue[p] : undefined
+            }
+            value = nestedValue || ""
+          } else {
+            value = JSON.stringify(value) // Stringify complex objects
+          }
+        } else if (typeof value === "string") {
+          value = value.replace(/"/g, '""') // Escape double quotes
+        }
+        return `"${value}"`
+      })
+      .join(",")
+  })
 
-  // Create Blob and download
-  const csvString = csvRows.join("\n")
-  const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" })
-  const url = URL.createObjectURL(blob)
+  const csvContent = [header, ...rows].join("\n")
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const link = document.createElement("a")
-  link.setAttribute("href", url)
-  const date = new Date().toISOString().split("T")[0] // YYYY-MM-DD
-  link.setAttribute("download", `${filenamePrefix}_${date}.csv`)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+
+  if (link.download !== undefined) {
+    // Browsers that support HTML5 download attribute
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", `${filename}_${new Date().toISOString().split("T")[0]}.csv`)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } else {
+    // Fallback for older browsers
+    alert("Your browser does not support HTML5 download attribute. Please save the file manually.")
+  }
 }

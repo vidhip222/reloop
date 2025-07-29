@@ -4,15 +4,13 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DollarSign, Package, XCircle, Clock, Loader2, Trash2 } from "lucide-react"
+import { Loader2, CheckCircle, XCircle, Brain, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Header } from "@/components/layout/header"
-import { AddReturnForm } from "@/components/returns/add-return-form"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { ReturnClassification } from "@/components/returns/return-classification"
 import { exportToCsv } from "@/lib/csv-export"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface ReturnItem {
   id: string
@@ -20,669 +18,276 @@ interface ReturnItem {
   product_id: string
   product_name: string
   return_reason: string
+  purchase_date: string
+  category: string
+  notes: string | null
   condition: string
-  ai_classification: "relist" | "outlet" | "marketplace" | "discard" | "manual_review" | null
-  confidence_score: number | null
-  status: "pending" | "approved" | "denied" | "processed" | "flagged"
-  refund_amount: number | null
-  ai_reasoning: string | null
-  images: string[]
+  images: string[] | null
+  eligibility_status: "pending" | "approved" | "rejected"
+  classification_ai: string | null
+  resale_platform_ai: string | null
   created_at: string
-  ai_suggested_platform?: string | null // New field
-  suggestion_reason?: string | null // New field
-  final_platform_choice?: string | null // New field
-}
-
-interface ResaleItem {
-  id: string
-  product_name: string
-  platform: string
-  listing_price: number
-  current_status: "listed" | "sold" | "pending" | "removed"
-  sold_price: number | null
-  profit_margin: number | null
-  platform_listing_id: string | null
-  listed_at: string
-  sold_at: string | null
-}
-
-interface ReturnAnalytics {
-  total_returns: number
-  pending_classification: number
-  eligible_returns: number
-  denied_returns: number
-  total_refunded_amount: number
-  total_recovered_revenue: number
-  classification_breakdown: {
-    relist: number
-    outlet: number
-    marketplace: number
-    discard: number
-    manual_review: number
-    pending: number // Added pending for items not yet classified
-  }
-  platform_performance: {
-    platform: string
-    listed: number
-    sold: number
-    revenue: number
-  }[]
 }
 
 export default function ReturnsManagerPage() {
   const [returnItems, setReturnItems] = useState<ReturnItem[]>([])
-  const [resaleItems, setResaleItems] = useState<ResaleItem[]>([])
-  const [analytics, setAnalytics] = useState<ReturnAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [processingReturnId, setProcessingReturnId] = useState<string | null>(null)
-  const [showAddReturnForm, setShowAddReturnForm] = useState(false)
-  const [showDeleteReturnConfirm, setShowDeleteReturnConfirm] = useState(false)
-  const [returnItemToDelete, setReturnItemToDelete] = useState<string | null>(null)
-  const [simulatingSync, setSimulatingSync] = useState(false)
+  const [processingId, setProcessingId] = useState<string | null>(null)
+  const [showClassificationDialog, setShowClassificationDialog] = useState(false)
+  const [selectedReturnItem, setSelectedReturnItem] = useState<ReturnItem | null>(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<"approve" | "reject" | null>(null)
+  const [confirmItemId, setConfirmItemId] = useState<string | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
-    fetchData()
+    fetchReturnItems()
   }, [])
 
-  const fetchData = async () => {
+  const fetchReturnItems = async () => {
     setLoading(true)
     try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 8000)
-
-      const [returnsRes, resaleRes, analyticsRes] = await Promise.allSettled([
-        fetch("/api/returns", { signal: controller.signal }),
-        fetch("/api/resale-items", { signal: controller.signal }),
-        fetch("/api/returns/analytics", { signal: controller.signal }),
-      ])
-      clearTimeout(timeoutId)
-
-      const processResponse = async (res: PromiseSettledResult<Response>, name: string) => {
-        if (res.status === "fulfilled" && res.value.ok) {
-          return await res.value.json()
-        } else {
-          const errorMsg =
-            res.status === "rejected"
-              ? res.reason.name === "AbortError"
-                ? `${name} fetch timed out.`
-                : res.reason.message
-              : `HTTP error! status: ${res.value.status} for ${name}`
-          console.error(`Error fetching ${name}:`, errorMsg)
-          toast({
-            title: "Data Load Error",
-            description: `Failed to load ${name}. ${errorMsg}`,
-            variant: "destructive",
-          })
-          return []
-        }
+      const response = await fetch("/api/returns")
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
-
-      setReturnItems(await processResponse(returnsRes, "return items"))
-      setResaleItems(await processResponse(resaleRes, "resale items"))
-      setAnalytics((await processResponse(analyticsRes, "returns analytics"))[0] || null)
-    } catch (error) {
-      console.error("Unexpected error during data fetch:", error)
+      const data = await response.json()
+      setReturnItems(data)
+    } catch (error: any) {
+      console.error("Error fetching return items:", error)
       toast({
-        title: "System Error",
-        description: "An unexpected error occurred while fetching dashboard data.",
+        title: "Data Load Error",
+        description: `Failed to load return items. ${error.message}`,
         variant: "destructive",
       })
-      setReturnItems([])
-      setResaleItems([])
-      setAnalytics(null)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleProcessReturn = async (returnId: string) => {
-    setProcessingReturnId(returnId)
+  const handleProcessReturn = async (id: string, action: "approve" | "reject") => {
+    setProcessingId(id)
     try {
-      const response = await fetch(`/api/returns/${returnId}/process`, {
+      const response = await fetch(`/api/returns/${id}/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
       })
-      if (response.ok) {
-        const result = await response.json()
-        toast({
-          title: "Return Processed",
-          description: `Return ${returnId.substring(0, 8)}... classified as "${result.ai_classification}".`,
-        })
-        fetchData()
-      } else {
+
+      if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
-    } catch (error: any) {
-      console.error("Error processing return:", error)
+
       toast({
-        title: "Processing Failed",
-        description: error.message || "Failed to process return. Please try again.",
+        title: "Success",
+        description: `Return ${id} ${action}d successfully!`,
+      })
+      fetchReturnItems() // Refresh data
+    } catch (error: any) {
+      console.error(`Error ${action}ing return:`, error)
+      toast({
+        title: "Error",
+        description: error.message || `Failed to ${action} return. Please try again.`,
         variant: "destructive",
       })
     } finally {
-      setProcessingReturnId(null)
+      setProcessingId(null)
+      setShowConfirmDialog(false)
+      setConfirmAction(null)
+      setConfirmItemId(null)
     }
   }
 
-  const handleAddReturnSubmit = async (data: any) => {
-    try {
-      const response = await fetch("/api/returns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      })
-
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Return item added successfully!",
-        })
-        setShowAddReturnForm(false)
-        fetchData()
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-    } catch (error: any) {
-      console.error("Error adding return item:", error)
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add return item. Please try again.",
-        variant: "destructive",
-      })
-    }
+  const handleClassifyReturn = async (item: ReturnItem) => {
+    setSelectedReturnItem(item)
+    setShowClassificationDialog(true)
   }
 
-  const handleDeleteReturnItem = async () => {
-    if (!returnItemToDelete) return
-
-    try {
-      const response = await fetch(`/api/returns/${returnItemToDelete}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Return item deleted successfully.",
-        })
-        fetchData()
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-    } catch (error) {
-      console.error("Error deleting return item:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete return item.",
-        variant: "destructive",
-      })
-    } finally {
-      setShowDeleteReturnConfirm(false)
-      setReturnItemToDelete(null)
-    }
+  const handleClassificationComplete = async () => {
+    setShowClassificationDialog(false)
+    setSelectedReturnItem(null)
+    fetchReturnItems() // Refresh data after classification
   }
 
-  const handleExportReturns = () => {
-    if (returnItems.length === 0) {
-      toast({
-        title: "No Data",
-        description: "No return items to export.",
-      })
-      return
+  const getStatusBadge = (status: string) => {
+    const statusColors = {
+      pending: "bg-yellow-100 text-yellow-800",
+      approved: "bg-green-100 text-green-800",
+      rejected: "bg-red-100 text-red-800",
     }
+    return (
+      <Badge className={statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800"}>
+        {status}
+      </Badge>
+    )
+  }
+
+  const handleExport = () => {
     const fields = [
-      "id",
-      "order_id",
-      "product_name",
-      "return_reason",
-      "condition",
-      "ai_classification",
-      "ai_suggested_platform",
-      "final_platform_choice",
-      "eligibility_status",
-      "refund_amount",
-      "created_at",
+      { key: "id", header: "Return ID" },
+      { key: "order_id", header: "Order ID" },
+      { key: "product_name", header: "Product Name" },
+      { key: "return_reason", header: "Return Reason" },
+      { key: "purchase_date", header: "Purchase Date" },
+      { key: "category", header: "Category" },
+      { key: "condition", header: "Condition" },
+      { key: "eligibility_status", header: "Status" },
+      { key: "classification_ai", header: "AI Classification" },
+      { key: "resale_platform_ai", header: "AI Resale Platform" },
+      { key: "created_at", header: "Created At" },
     ]
-    exportToCsv(returnItems, "returns_export", fields)
+    exportToCsv(returnItems, fields, "return_items")
     toast({
       title: "Export Successful",
       description: "Return items exported to CSV.",
     })
   }
 
-  const handleSimulateSync = async () => {
-    setSimulatingSync(true)
-    try {
-      const response = await fetch("/api/marketplace-sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      })
-
-      if (response.ok) {
-        toast({
-          title: "Sync Simulated",
-          description: "Marketplace sync simulation complete. Data refreshed.",
-        })
-        fetchData()
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-    } catch (error: any) {
-      console.error("Error simulating sync:", error)
-      toast({
-        title: "Sync Failed",
-        description: error.message || "Failed to simulate marketplace sync.",
-        variant: "destructive",
-      })
-    } finally {
-      setSimulatingSync(false)
-    }
-  }
-
-  const handleFinalPlatformChange = async (itemId: string, newPlatform: string) => {
-    try {
-      const response = await fetch(`/api/returns/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ final_platform_choice: newPlatform }),
-      })
-
-      if (response.ok) {
-        toast({
-          title: "Platform Updated",
-          description: `Final platform for ${itemId.substring(0, 8)}... set to ${newPlatform}.`,
-        })
-        fetchData() // Refresh data to show updated value
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-    } catch (error: any) {
-      console.error("Error updating final platform:", error)
-      toast({
-        title: "Update Failed",
-        description: error.message || "Failed to update final platform.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const getClassificationBadge = (classification: string | null) => {
-    switch (classification) {
-      case "relist":
-        return <Badge className="bg-green-100 text-green-800">Relist</Badge>
-      case "outlet":
-        return <Badge className="bg-blue-100 text-blue-800">Outlet</Badge>
-      case "marketplace":
-        return <Badge className="bg-purple-100 text-purple-800">Marketplace</Badge>
-      case "discard":
-        return <Badge className="bg-red-100 text-red-800">Discard</Badge>
-      case "manual_review":
-        return <Badge className="bg-orange-100 text-orange-800">Manual Review</Badge>
-      default:
-        return <Badge variant="secondary">Pending</Badge>
-    }
-  }
-
-  const getReturnStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending":
-        return <Badge variant="secondary">Pending</Badge>
-      case "approved":
-        return <Badge className="bg-green-100 text-green-800">Approved</Badge>
-      case "denied":
-        return <Badge variant="destructive">Denied</Badge>
-      case "processed":
-        return <Badge className="bg-blue-100 text-blue-800">Processed</Badge>
-      case "flagged":
-        return <Badge className="bg-yellow-100 text-yellow-800">Flagged</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
-  }
-
-  const resalePlatforms = [
-    "eBay",
-    "Poshmark",
-    "TheRealReal",
-    "Mercari",
-    "Facebook Marketplace",
-    "ThredUp",
-    "Depop",
-    "Outlet Store",
-    "Donate",
-    "Recycle",
-  ]
-
-  if (showAddReturnForm) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="p-6">
-          <AddReturnForm onSubmit={handleAddReturnSubmit} onCancel={() => setShowAddReturnForm(false)} />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Returns & Resale Manager</h1>
-            <p className="text-gray-600">Turn returns into revenue with smart recovery decisions.</p>
-          </div>
-          <div className="flex space-x-2">
-            <Button onClick={handleExportReturns} variant="outline">
-              Export CSV
-            </Button>
-            <Button onClick={handleSimulateSync} disabled={simulatingSync}>
-              {simulatingSync ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Simulate Marketplace Sync"}
-            </Button>
-            <Button onClick={() => setShowAddReturnForm(true)}>Add Return Item</Button>
-          </div>
+        <div className="mb-8 flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-gray-900">Returns Manager</h1>
+          <Button onClick={handleExport} variant="outline">
+            <Download className="h-4 w-4 mr-2" /> Export to CSV
+          </Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <Package className="h-8 w-8 text-blue-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Returns</p>
-                  <p className="text-2xl font-bold">{analytics?.total_returns || 0}</p>
-                </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>All Return Requests</CardTitle>
+            <CardDescription>Manage and process customer return requests.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center h-48">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <Clock className="h-8 w-8 text-yellow-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Pending Classification</p>
-                  <p className="text-2xl font-bold">{analytics?.pending_classification || 0}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <DollarSign className="h-8 w-8 text-green-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Revenue Recovered</p>
-                  <p className="text-2xl font-bold">${analytics?.total_recovered_revenue.toFixed(2) || "0.00"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <XCircle className="h-8 w-8 text-red-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Denied Returns</p>
-                  <p className="text-2xl font-bold">{analytics?.denied_returns || 0}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        <Tabs defaultValue="returns" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="returns">Return Items</TabsTrigger>
-            <TabsTrigger value="resale">Resale Listings</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          </TabsList>
-          <TabsContent value="returns">
-            <Card>
-              <CardHeader>
-                <CardTitle>Returned Items Awaiting Classification</CardTitle>
-                <CardDescription>AI automatically determines the optimal next step for each item.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="flex items-center justify-center h-48">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Order ID</TableHead>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Reason</TableHead>
-                        <TableHead>Condition</TableHead>
-                        <TableHead>AI Classification</TableHead>
-                        <TableHead>AI Suggestion</TableHead>
-                        <TableHead>Final Platform</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {returnItems.length > 0 ? (
-                        returnItems.map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell className="font-medium">{item.order_id}</TableCell>
-                            <TableCell>{item.product_name}</TableCell>
-                            <TableCell>{item.return_reason}</TableCell>
-                            <TableCell>{item.condition}</TableCell>
-                            <TableCell>
-                              {item.ai_classification ? (
-                                getClassificationBadge(item.ai_classification)
-                              ) : (
-                                <Badge variant="outline">N/A</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {item.ai_suggested_platform ? (
-                                <div className="text-sm">
-                                  <p className="font-medium">{item.ai_suggested_platform}</p>
-                                  <p className="text-muted-foreground text-xs">{item.suggestion_reason}</p>
-                                </div>
-                              ) : (
-                                "N/A"
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Select
-                                value={item.final_platform_choice || ""}
-                                onValueChange={(value) => handleFinalPlatformChange(item.id, value)}
-                                disabled={!item.ai_classification} // Disable if not yet classified by AI
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Return ID</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Condition</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>AI Classification</TableHead>
+                    <TableHead>AI Resale Platform</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {returnItems.length > 0 ? (
+                    returnItems.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.id.substring(0, 8)}...</TableCell>
+                        <TableCell>
+                          <p className="font-medium">{item.product_name}</p>
+                          <p className="text-sm text-muted-foreground">Order: {item.order_id}</p>
+                        </TableCell>
+                        <TableCell>{item.return_reason}</TableCell>
+                        <TableCell className="capitalize">{item.condition}</TableCell>
+                        <TableCell>{getStatusBadge(item.eligibility_status)}</TableCell>
+                        <TableCell>
+                          {item.classification_ai || <span className="text-muted-foreground">Not classified</span>}
+                        </TableCell>
+                        <TableCell>
+                          {item.resale_platform_ai || <span className="text-muted-foreground">Not suggested</span>}
+                        </TableCell>
+                        <TableCell className="space-x-2">
+                          {item.eligibility_status === "pending" ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleClassifyReturn(item)}
+                                disabled={processingId === item.id}
                               >
-                                <SelectTrigger className="w-[180px]">
-                                  <SelectValue placeholder="Select platform" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {resalePlatforms.map((platform) => (
-                                    <SelectItem key={platform} value={platform}>
-                                      {platform}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>{getReturnStatusBadge(item.status)}</TableCell>
-                            <TableCell className="flex space-x-2">
-                              {item.status === "pending" && (
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleProcessReturn(item.id)}
-                                  disabled={processingReturnId === item.id}
-                                >
-                                  {processingReturnId === item.id ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  ) : (
-                                    "Process"
-                                  )}
-                                </Button>
-                              )}
-                              {item.status !== "pending" && (
-                                <Button size="sm" variant="outline" disabled>
-                                  Processed
-                                </Button>
-                              )}
+                                {processingId === item.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Brain className="h-4 w-4" />
+                                )}
+                                <span className="sr-only">Classify with AI</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setConfirmItemId(item.id)
+                                  setConfirmAction("approve")
+                                  setShowConfirmDialog(true)
+                                }}
+                                disabled={processingId === item.id}
+                              >
+                                {processingId === item.id && confirmAction === "approve" ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="h-4 w-4" />
+                                )}
+                                <span className="sr-only">Approve</span>
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="destructive"
                                 onClick={() => {
-                                  setReturnItemToDelete(item.id)
-                                  setShowDeleteReturnConfirm(true)
+                                  setConfirmItemId(item.id)
+                                  setConfirmAction("reject")
+                                  setShowConfirmDialog(true)
                                 }}
+                                disabled={processingId === item.id}
                               >
-                                <Trash2 className="h-4 w-4" />
+                                {processingId === item.id && confirmAction === "reject" ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <XCircle className="h-4 w-4" />
+                                )}
+                                <span className="sr-only">Reject</span>
                               </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={9} className="text-center text-muted-foreground py-4">
-                            No return items awaiting classification.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="resale">
-            <Card>
-              <CardHeader>
-                <CardTitle>Resale & Recovery Listings</CardTitle>
-                <CardDescription>Track items listed on various resale platforms or routed to outlet.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="flex items-center justify-center h-48">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Platform</TableHead>
-                        <TableHead>Listing Price</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Sold Price</TableHead>
-                        <TableHead>Profit Margin</TableHead>
-                        <TableHead>Listed At</TableHead>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">Processed</span>
+                          )}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {resaleItems.length > 0 ? (
-                        resaleItems.map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell className="font-medium">{item.product_name}</TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">{item.platform}</Badge>
-                            </TableCell>
-                            <TableCell>${item.listing_price.toFixed(2)}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  item.current_status === "sold"
-                                    ? "outline"
-                                    : item.current_status === "listed"
-                                      ? "default"
-                                      : "secondary"
-                                }
-                              >
-                                {item.current_status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{item.sold_price ? `$${item.sold_price.toFixed(2)}` : "N/A"}</TableCell>
-                            <TableCell>{item.profit_margin ? `${item.profit_margin.toFixed(2)}%` : "N/A"}</TableCell>
-                            <TableCell>{new Date(item.listed_at).toLocaleDateString()}</TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground py-4">
-                            No resale listings available.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="analytics">
-            <Card>
-              <CardHeader>
-                <CardTitle>Returns & Resale Analytics</CardTitle>
-                <CardDescription>Insights into return trends and profit recovery.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="flex items-center justify-center h-48">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : analytics ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">Classification Breakdown</h3>
-                      <div className="space-y-2">
-                        {Object.entries(analytics.classification_breakdown).map(([key, value]) => (
-                          <div key={key} className="flex justify-between items-center">
-                            <span className="capitalize">{key.replace("_", " ")}:</span>
-                            <Badge variant="secondary">{value}</Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">Platform Performance</h3>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Platform</TableHead>
-                            <TableHead>Listed</TableHead>
-                            <TableHead>Sold</TableHead>
-                            <TableHead>Revenue</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {analytics.platform_performance.map((p) => (
-                            <TableRow key={p.platform}>
-                              <TableCell className="font-medium">{p.platform}</TableCell>
-                              <TableCell>{p.listed}</TableCell>
-                              <TableCell>{p.sold}</TableCell>
-                              <TableCell>${p.revenue.toFixed(2)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center text-muted-foreground py-8">No analytics data available.</div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-4">
+                        No return requests found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
+      {selectedReturnItem && (
+        <ReturnClassification
+          isOpen={showClassificationDialog}
+          onClose={() => setShowClassificationDialog(false)}
+          returnItem={selectedReturnItem}
+          onClassifySuccess={handleClassificationComplete}
+        />
+      )}
+
       <ConfirmationDialog
-        isOpen={showDeleteReturnConfirm}
-        onClose={() => setShowDeleteReturnConfirm(false)}
-        onConfirm={handleDeleteReturnItem}
-        title="Confirm Deletion"
-        description="Are you sure you want to delete this return item? This action cannot be undone."
+        isOpen={showConfirmDialog}
+        onClose={() => setShowConfirmDialog(false)}
+        onConfirm={() => {
+          if (confirmItemId && confirmAction) {
+            handleProcessReturn(confirmItemId, confirmAction)
+          }
+        }}
+        title={`Confirm ${confirmAction === "approve" ? "Approval" : "Rejection"}`}
+        description={`Are you sure you want to ${confirmAction} this return request? This action cannot be undone.`}
+        confirmText={confirmAction === "approve" ? "Approve" : "Reject"}
+        cancelText="Cancel"
       />
     </div>
   )

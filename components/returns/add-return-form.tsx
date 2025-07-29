@@ -2,25 +2,31 @@
 
 import type React from "react"
 
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { XCircle } from "lucide-react" // Import XCircle
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { cn } from "@/lib/utils"
+import { Loader2, Plus, Trash2 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface AddReturnFormData {
-  order_id: string // New field
+  order_id: string
   sku: string
   productName: string
   returnReason: string
-  purchaseDate: string
+  purchaseDate: Date
   category: string
-  notes: string
-  condition: string // New field
-  images: string[] // New field
+  notes?: string
+  condition: "new" | "used" | "damaged" | "refurbished"
+  images: string[] // Array of image URLs
 }
 
 interface AddReturnFormProps {
@@ -29,56 +35,69 @@ interface AddReturnFormProps {
 }
 
 export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
+  const [loading, setLoading] = useState(false)
+  const [images, setImages] = useState<string[]>([])
+  const { toast } = useToast()
   const {
     register,
     handleSubmit,
+    formState: { errors },
     setValue,
     watch,
-    formState: { errors },
+    reset,
   } = useForm<AddReturnFormData>()
 
-  const categories = ["Apparel", "Footwear", "Accessories", "Electronics", "Home & Garden", "Beauty", "Sports", "Other"]
-  const returnReasons = [
-    "Size too small",
-    "Size too large",
-    "Defective item",
-    "Not as described",
-    "Changed mind",
-    "Arrived damaged",
-    "Wrong item received",
-    "Quality issues",
-    "Other",
-  ]
-  const conditions = ["new", "excellent", "good", "fair", "poor"]
+  const watchedPurchaseDate = watch("purchaseDate")
+  const watchedReturnReason = watch("returnReason")
+  const watchedCategory = watch("category")
+  const watchedCondition = watch("condition")
 
-  const watchedImages = watch("images") || []
-
-  const handleImageAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // In a real app, you'd upload this to a storage service (e.g., Vercel Blob, Supabase Storage)
-      // For now, we'll use a placeholder URL
-      const newImageUrl = `/placeholder.svg?height=100&width=100&query=${encodeURIComponent(file.name)}`
-      setValue("images", [...watchedImages, newImageUrl])
-      e.target.value = "" // Clear the input
-    }
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const newImages = [...images]
+    newImages[index] = e.target.value
+    setImages(newImages)
+    setValue("images", newImages)
   }
 
-  const handleImageRemove = (index: number) => {
-    const newImages = watchedImages.filter((_, i) => i !== index)
+  const handleAddImageField = () => {
+    setImages([...images, ""])
+  }
+
+  const handleRemoveImageField = (index: number) => {
+    const newImages = images.filter((_, i) => i !== index)
+    setImages(newImages)
     setValue("images", newImages)
+  }
+
+  const handleFormSubmit = async (data: AddReturnFormData) => {
+    setLoading(true)
+    try {
+      // The onSubmit prop from the parent (DashboardPage) will handle the actual Supabase insertion
+      onSubmit(data)
+      reset()
+      setImages([]) // Clear images after submission
+    } catch (error: any) {
+      console.error("Error in return form submission:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add return item. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
-        <CardTitle>Add Return Item</CardTitle>
+        <CardTitle>Add New Return Item</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="order_id">Original Order ID</Label>
+              <Label htmlFor="order_id">Order ID</Label>
               <Input
                 id="order_id"
                 placeholder="ORD-12345"
@@ -87,7 +106,7 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
               {errors.order_id && <p className="text-sm text-red-600">{errors.order_id.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sku">SKU (Product ID)</Label>
+              <Label htmlFor="sku">Product SKU</Label>
               <Input id="sku" placeholder="SKU-001" {...register("sku", { required: "SKU is required" })} />
               {errors.sku && <p className="text-sm text-red-600">{errors.sku.message}</p>}
             </div>
@@ -97,7 +116,7 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
             <Label htmlFor="productName">Product Name</Label>
             <Input
               id="productName"
-              placeholder="Product name"
+              placeholder="Product Name"
               {...register("productName", { required: "Product name is required" })}
             />
             {errors.productName && <p className="text-sm text-red-600">{errors.productName.message}</p>}
@@ -107,7 +126,7 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
             <div className="space-y-2">
               <Label htmlFor="returnReason">Return Reason</Label>
               <Select
-                value={watch("returnReason")}
+                value={watchedReturnReason}
                 onValueChange={(value) => setValue("returnReason", value)}
                 {...register("returnReason", { required: "Return reason is required" })}
               >
@@ -115,20 +134,49 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
                   <SelectValue placeholder="Select reason" />
                 </SelectTrigger>
                 <SelectContent>
-                  {returnReasons.map((reason) => (
-                    <SelectItem key={reason} value={reason}>
-                      {reason}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="Defective">Defective</SelectItem>
+                  <SelectItem value="Not as described">Not as described</SelectItem>
+                  <SelectItem value="Changed mind">Changed mind</SelectItem>
+                  <SelectItem value="Wrong size/color">Wrong size/color</SelectItem>
+                  <SelectItem value="Damaged in transit">Damaged in transit</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
               {errors.returnReason && <p className="text-sm text-red-600">{errors.returnReason.message}</p>}
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="purchaseDate">Purchase Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !watchedPurchaseDate && "text-muted-foreground",
+                    )}
+                  >
+                    {watchedPurchaseDate ? format(watchedPurchaseDate, "PPP") : "Pick a date"}
+                    <Calendar className="ml-auto h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={watchedPurchaseDate}
+                    onSelect={(date) => setValue("purchaseDate", date!)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              {errors.purchaseDate && <p className="text-sm text-red-600">{errors.purchaseDate.message}</p>}
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
               <Select
-                value={watch("category")}
+                value={watchedCategory}
                 onValueChange={(value) => setValue("category", value)}
                 {...register("category", { required: "Category is required" })}
               >
@@ -136,43 +184,30 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="Electronics">Electronics</SelectItem>
+                  <SelectItem value="Apparel">Apparel</SelectItem>
+                  <SelectItem value="Home Goods">Home Goods</SelectItem>
+                  <SelectItem value="Books">Books</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
               {errors.category && <p className="text-sm text-red-600">{errors.category.message}</p>}
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="purchaseDate">Purchase Date</Label>
-              <Input
-                id="purchaseDate"
-                type="date"
-                {...register("purchaseDate", { required: "Purchase date is required" })}
-              />
-              {errors.purchaseDate && <p className="text-sm text-red-600">{errors.purchaseDate.message}</p>}
-            </div>
             <div className="space-y-2">
               <Label htmlFor="condition">Condition</Label>
               <Select
-                value={watch("condition")}
-                onValueChange={(value) => setValue("condition", value)}
+                value={watchedCondition}
+                onValueChange={(value: AddReturnFormData["condition"]) => setValue("condition", value)}
                 {...register("condition", { required: "Condition is required" })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select condition" />
                 </SelectTrigger>
                 <SelectContent>
-                  {conditions.map((condition) => (
-                    <SelectItem key={condition} value={condition}>
-                      {condition}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="new">New</SelectItem>
+                  <SelectItem value="used">Used</SelectItem>
+                  <SelectItem value="damaged">Damaged</SelectItem>
+                  <SelectItem value="refurbished">Refurbished</SelectItem>
                 </SelectContent>
               </Select>
               {errors.condition && <p className="text-sm text-red-600">{errors.condition.message}</p>}
@@ -180,42 +215,34 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea id="notes" placeholder="Additional notes about the return..." rows={3} {...register("notes")} />
+            <Label htmlFor="notes">Notes (Optional)</Label>
+            <Textarea id="notes" placeholder="Additional notes about the return..." {...register("notes")} rows={3} />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="images">Images (Upload or paste URLs)</Label>
-            <div className="flex items-center space-x-2">
-              <Input id="images" type="file" accept="image/*" onChange={handleImageAdd} />
-            </div>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {watchedImages.map((imgUrl, index) => (
-                <div key={index} className="relative w-24 h-24 border rounded-md overflow-hidden">
-                  <img
-                    src={imgUrl || "/placeholder.svg"}
-                    alt={`Return item ${index + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-1 right-1 h-6 w-6 rounded-full"
-                    onClick={() => handleImageRemove(index)}
-                  >
-                    <XCircle className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <Label>Images (URLs)</Label>
+            {images.map((image, index) => (
+              <div key={index} className="flex items-center space-x-2">
+                <Input placeholder="Image URL" value={image} onChange={(e) => handleImageChange(e, index)} />
+                <Button type="button" variant="outline" size="icon" onClick={() => handleRemoveImageField(index)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={handleAddImageField}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Image
+            </Button>
           </div>
 
-          <div className="flex justify-end space-x-4">
-            <Button type="button" variant="outline" onClick={onCancel}>
+          <div className="flex justify-end space-x-2">
+            <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit">Add Return Item</Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Add Return
+            </Button>
           </div>
         </form>
       </CardContent>
