@@ -137,7 +137,7 @@ export function POForm({ suppliers, buyers, onSubmit, onCancel, initialSupplierI
                   <SelectValue placeholder="Select buyer" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {buyers.map((buyer) => (
                     <SelectItem key={buyer.id} value={buyer.id}>
                       {buyer.name}

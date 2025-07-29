@@ -156,7 +156,6 @@ export function AddReturnForm({ onSubmit, onCancel }: AddReturnFormProps) {
                     )}
                   >
                     {watchedPurchaseDate ? format(watchedPurchaseDate, "PPP") : "Pick a date"}
-                    <Calendar className="ml-auto h-4 w-4 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
