@@ -84,5 +84,5 @@ Classifies returns, determines resale paths, and assists refund decisions.
 ### 1. Clone the Repo
 
 ```bash
-git clone https://github.com/yourusername/reloop.git
+git clone https://github.com/vidhip222/reloop.git
 cd reloop
