@@ -73,6 +73,7 @@ Classifies returns, determines resale paths, and assists refund decisions.
 | Auth          | Supabase Auth                          |
 | Storage       | Supabase Storage                       |
 | Email         | Resend                                 |
+| Resale APIs   | eBay, TheRealReal, ThredUp, etc        |
 | Payment       | Stripe, PayPal                         |
 | POS Sync      | Shopify, Square, WooCommerce           |
 | Deployment    | Vercel (frontend), Render (backend)    |
