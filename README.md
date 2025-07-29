@@ -1,30 +1,88 @@
-# ReLoop clone
+# 🔁 ReLoop
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+**ReLoop** is a full-stack AI-powered retail assistant that helps businesses optimize inventory operations and streamline returns management. It currently ships with two powerful modules:
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/vidhis-projects-8a0cae0c/v0-re-loop-clone)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/vlZ57dxDh6d)
+- 🧠 **Smart Buyer & Supplier Intelligence**  
+- 🔄 **Returns & Resale Manager**
 
-## Overview
+Built for modern retail teams looking to reduce manual work, improve restock decisions, and recover revenue from returned or excess inventory.
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+---
 
-## Deployment
+## 🚀 Features
 
-Your project is live at:
+### 1. Smart Buyer & Supplier Intelligence
 
-**[https://vercel.com/vidhis-projects-8a0cae0c/v0-re-loop-clone](https://vercel.com/vidhis-projects-8a0cae0c/v0-re-loop-clone)**
+Predicts restock needs, benchmarks suppliers, and generates purchase orders.
 
-## Build your app
+- 🔮 **Restock Forecasting**  
+  Uses sales data, trends, and seasonality to predict SKU-level restocking needs with Gemini 2.0 reasoning.
 
-Continue building your app on:
+- 🏷 **Supplier Benchmarking**  
+  Compares vendors based on price, delivery speed, MOQ, and reliability (mock API or real integrations).
 
-**[https://v0.dev/chat/projects/vlZ57dxDh6d](https://v0.dev/chat/projects/vlZ57dxDh6d)**
+- 🤝 **Auto Purchase Order Suggestions**  
+  Suggests optimal POs and negotiation terms (e.g., bulk discounts). Email POs via Resend.
 
-## How It Works
+- 📊 **Buyer Dashboard**  
+  View restock recommendations, supplier rankings, and PO statuses.
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+---
+
+### 2. Returns & Resale Manager
+
+Classifies returns, determines resale paths, and assists refund decisions.
+
+- 🧠 **Return Classification Assistant**  
+  Gemini suggests what to do with returned items based on product info, condition, and seasonality.  
+  Possible actions:
+  - Relist in main storefront
+  - Send to outlet
+  - Recommend resale on platforms like eBay, TheRealReal, ThredUp
+  - Discard/donate/manual review
+
+- ✅ **Returns Eligibility Engine**  
+  Automatically checks item return eligibility based on:
+  - Store policy
+  - Purchase date
+  - Product type
+  - Return reason and condition
+
+- 💸 **Refund Processing Logic**  
+  - Auto-approves refunds (Stripe/PayPal)
+  - Flags ambiguous or partial cases for review
+  - Sends status updates via Resend
+
+- 🛍️ **Resale Suggestions (Manual for Now)**  
+  - Gemini recommends the best resale channel
+  - In future versions, resale listing will be automated via eBay, ThredUp, and TheRealReal APIs
+
+- 📈 **Returns Dashboard**  
+  Track return status, refund flow, and resale suggestions.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer         | Technology                            |
+|---------------|----------------------------------------|
+| Frontend      | React (Next.js), TailwindCSS           |
+| Backend       | FastAPI (Python)                       |
+| AI            | Gemini 2.0 API (Chat + Vision)         |
+| Database      | PostgreSQL (via Supabase)              |
+| Auth          | Supabase Auth                          |
+| Storage       | Supabase Storage                       |
+| Email         | Resend                                 |
+| Payment       | Stripe, PayPal                         |
+| POS Sync      | Shopify, Square, WooCommerce           |
+| Deployment    | Vercel (frontend), Render (backend)    |
+
+---
+
+## ⚙️ Local Setup
+
+### 1. Clone the Repo
+
+```bash
+git clone https://github.com/yourusername/reloop.git
+cd reloop
