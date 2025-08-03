@@ -1,89 +1,118 @@
-# 🔁 ReLoop
+# 🔁 ReLoop – AI-Powered Retail Recovery & Resupply
 
-**ReLoop** is a full-stack AI-powered retail assistant that helps businesses optimize inventory operations and streamline returns management. It currently ships with two powerful modules:
-
-- 🧠 **Smart Buyer & Supplier Intelligence**  
-- 🔄 **Returns & Resale Manager**
-
-Built for modern retail teams looking to reduce manual work, improve restock decisions, and recover revenue from returned or excess inventory.
+**ReLoop** is a modular AI retail platform that helps modern businesses optimize supplier restocks and recover revenue from returns. Our mission:  
+**Rethink how retail handles returns and resupply—cut costs, reduce landfill waste, and make resale intelligent, scalable, and profitable.**
 
 ---
 
-## 🚀 Features
+## 🧭 Modules
 
-### 1. Smart Buyer & Supplier Intelligence
+1. 🧠 **Smart Buyer & Supplier Intelligence**  
+   Predict restock needs, benchmark suppliers, and negotiate better purchase orders.
 
-Predicts restock needs, benchmarks suppliers, and generates purchase orders.
-
-- 🔮 **Restock Forecasting**  
-  Uses sales data, trends, and seasonality to predict SKU-level restocking needs with Gemini 2.0 reasoning.
-
-- 🏷 **Supplier Benchmarking**  
-  Compares vendors based on price, delivery speed, MOQ, and reliability (mock API or real integrations).
-
-- 🤝 **Auto Purchase Order Suggestions**  
-  Suggests optimal POs and negotiation terms (e.g., bulk discounts). Email POs via Resend.
-
-- 📊 **Buyer Dashboard**  
-  View restock recommendations, supplier rankings, and PO statuses.
+2. 🔄 **Returns & Resale Manager**  
+   Classify returns, trigger refunds, and auto-route resale to platforms like eBay.
 
 ---
 
-### 2. Returns & Resale Manager
+### 🧠 Smart Buyer & Supplier Intelligence
 
-Classifies returns, determines resale paths, and assists refund decisions.
+#### ✅ Core Features
 
-- 🧠 **Return Classification Assistant**  
-  Gemini suggests what to do with returned items based on product info, condition, and seasonality.  
-  Possible actions:
-  - Relist in main storefront
-  - Send to outlet
-  - Recommend resale on platforms like eBay, TheRealReal, ThredUp
-  - Discard/donate/manual review
+- 🔮 **Restock Prediction**  
+  Predict SKU-level quantities using inventory, sales, trends, and seasonality  
+  → Gemini explains “Why this quantity?”
 
-- ✅ **Returns Eligibility Engine**  
-  Automatically checks item return eligibility based on:
-  - Store policy
-  - Purchase date
-  - Product type
-  - Return reason and condition
+- 📊 **Supplier Benchmarking**  
+  Compare vendors by price, SLA, return %, defect rate, and location  
+  → Gemini flags poor suppliers
 
-- 💸 **Refund Processing Logic**  
-  - Auto-approves refunds (Stripe/PayPal)
-  - Flags ambiguous or partial cases for review
-  - Sends status updates via Resend
+- 📄 **PO Generator**  
+  Editable POs with Gemini-suggested MOQ, discounts, and shipping  
+  → Auto-send or save as draft
 
-- 🛍️ **Resale Suggestions (Manual for Now)**  
-  - Gemini recommends the best resale channel
-  - In future versions, resale listing will be automated via eBay, ThredUp, and TheRealReal APIs
+- 📈 **PO Tracker**  
+  Status timeline: Created → Confirmed → Shipped → Delayed  
+  → Exception alerts for quantity mismatches, delays, or SLA issues
 
-- 📈 **Returns Dashboard**  
-  Track return status, refund flow, and resale suggestions.
+---
+
+### 🔄 Returns & Resale Manager
+
+#### ✅ Core Features
+
+- 🧠 **Return Classification**  
+  Gemini evaluates image, metadata, trend score → suggests action  
+  → Outputs a 1-word tag (e.g., “Relist”, “Donate”) + expandable reason
+
+- 🔁 **Resale Routing**  
+  - eBay API (live)
+  - CSV Export (ThredUp, Depop, Poshmark, etc.)
+  - Gemini selects resale channel per item type
+
+- 📥 **Bulk Intake & Manual Override**  
+  - Upload returns via CSV + image blob  
+  - Override AI suggestions, with audit logs
+
+- 💳 **Refund Logic & Fraud Flagging**  
+  Auto-refund if eligible, flag edge cases  
+  → Triggers Stripe/PayPal actions
+
+- 🔄 **Inventory Sync** (planned)  
+  Shopify, Square, WooCommerce support
+
+#### 🖥️ Return UI Components
+
+- **Return Intake Card**  
+  Upload image, metadata → view tag → expand reasoning
+
+- **Eligibility Checker**  
+  Rules: return window, item condition, receipt  
+  → Gemini fallback for ambiguous cases
+
+- **Auto Refund Trigger**  
+  Processes or flags refund
+
+- **Resale Sync Panel**  
+  Platform routing logic + sync status
+
+---
+
+## 📊 Admin Dashboards
+
+- 🔥 **Product Trend Panel** – Gemini says: Hot / Declining / Niche
+- ♻️ **Return Funnel** – Approved / Flagged / Denied
+- 🛒 **Resale Tracker** – Live listings, Sold %, Failed %
+- 📦 **Inventory Recovery** – % of returns salvaged
+- 💰 **ROI Dashboard** – Profit per resale channel vs COGS
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer         | Technology                            |
-|---------------|----------------------------------------|
-| Frontend      | React (Next.js), TailwindCSS           |
-| Backend       | FastAPI (Python)                       |
-| AI            | Gemini 2.0 API (Chat + Vision)         |
-| Database      | PostgreSQL (via Supabase)              |
-| Auth          | Supabase Auth                          |
-| Storage       | Supabase Storage                       |
-| Email         | Resend                                 |
-| Resale APIs   | eBay, TheRealReal, ThredUp, etc        |
-| Payment       | Stripe, PayPal                         |
-| POS Sync      | Shopify, Square, WooCommerce           |
-| Deployment    | Vercel (frontend), Render (backend)    |
+| Layer        | Tech                                         |
+|--------------|----------------------------------------------|
+| Frontend     | React (Next.js), Tailwind CSS                |
+| Backend      | FastAPI (Python)                             |
+| Database     | PostgreSQL (Supabase)                        |
+| Auth         | Supabase Auth                                |
+| AI           | Gemini 2.0 (Chat + Vision)                   |
+| Resale Sync  | eBay API (live), CSV export for others       |
+| Payments     | Stripe, PayPal                               |
+| POS (Planned)| Shopify, Square, WooCommerce                 |
+| Storage      | Supabase Storage                             |
+| Email        | Resend                                       |
+| Hosting      | Vercel (frontend), Render (backend)          |
 
 ---
 
-## ⚙️ Local Setup
-
-### 1. Clone the Repo
+## 📦 Local Setup
 
 ```bash
+git clone https://github.com/vidhip222/reloop.git
+cd reloop
+pnpm install
+pnpm dev
+
 git clone https://github.com/vidhip222/reloop.git
 cd reloop
