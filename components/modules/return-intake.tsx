@@ -15,6 +15,7 @@ import { classifyReturnAction, processReturnAction } from "@/actions"
 import { useActionState } from "react"
 
 export default function ReturnIntake() {
+  const [fileInputKey, setFileInputKey] = useState(0)
   const [formData, setFormData] = useState({
     sku: "",
     brand: "",
@@ -69,7 +70,7 @@ export default function ReturnIntake() {
       setRelistPlatform("") // Reset relist platform
       formRef.current?.reset() // Reset the form fields
       if (fileInputRef.current) {
-        fileInputRef.current.value = "" // Clear the file input
+        setFileInputKey((prev) => prev + 1) // Clear the file input
       }
     } else {
       toast({
@@ -140,7 +141,7 @@ export default function ReturnIntake() {
                     onClick={() => {
                       setFormData((prev) => ({ ...prev, imageUrl: "" }))
                       if (fileInputRef.current) {
-                        fileInputRef.current.value = "" // Clear the file input
+                        setFileInputKey((prev) => prev + 1) // Clear the file input
                       }
                     }}
                   >
@@ -153,11 +154,12 @@ export default function ReturnIntake() {
                   <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
                   <p className="text-sm text-gray-600 mb-2">Upload product image</p>
                   <Input
+                    key={fileInputKey}
                     type="file"
                     accept="image/*"
                     onChange={handleImageUpload}
                     className="max-w-xs mx-auto"
-                    ref={fileInputRef} // Attach ref here
+                    ref={fileInputRef}
                   />
                 </div>
               )}

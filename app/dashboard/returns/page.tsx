@@ -21,6 +21,32 @@ export default function ReturnsManagementPage() {
   const [isModalOpen, setIsModalOpen] = useState(false) // State to control modal visibility
   const { toast } = useToast()
 
+  const handleMarkAsProcessed = async (returnId: string) => {
+    try {
+      const { error } = await supabase
+        .from("returns")
+        .update({ status: "processed" })
+        .eq("id", returnId)
+
+      if (error) throw error
+
+      toast({
+        title: "Status Updated",
+        description: "The return has been marked as processed.",
+      })
+
+      setIsModalOpen(false) // Close modal
+      loadReturns() // Reload data
+    } catch (error) {
+      console.error("Error updating status:", error)
+      toast({
+        title: "Update Failed",
+        description: "Could not update return status.",
+        variant: "destructive",
+      })
+    }
+  }
+
   useEffect(() => {
     loadReturns()
   }, [filterStatus])
@@ -295,6 +321,15 @@ export default function ReturnsManagementPage() {
                 <p className="text-sm text-gray-700">{selectedReturn.ai_reasoning}</p>
               </div>
             </div>
+          )}
+          {selectedReturn?.status === "flagged" && (
+            <Button
+              variant="default"
+              onClick={() => handleMarkAsProcessed(selectedReturn.id)}
+              className="mt-4"
+            >
+              Mark as Processed
+            </Button>
           )}
         </DialogContent>
       </Dialog>
