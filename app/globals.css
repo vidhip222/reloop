@@ -1,6 +1,8 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/* Custom variant for dark mode, if supported by a PostCSS plugin */
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -74,6 +76,8 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
+/* This @theme inline directive is non-standard CSS and might require a specific PostCSS plugin. */
+/* If you encounter further deployment issues, consider if this directive is necessary or how it's processed. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
