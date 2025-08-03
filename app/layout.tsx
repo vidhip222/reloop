@@ -1,27 +1,27 @@
 import type React from "react"
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
+import { Inter } from "next/font/google"
 import { Toaster } from "@/components/ui/toaster"
+import { ThemeProvider } from "@/components/theme-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export const metadata: Metadata = {
-  title: "ReLoop - Inventory & Returns Management",
-  description: "AI-powered platform for optimizing inventory, managing returns, and enhancing supplier relationships.",
+export const metadata = {
+  title: "ReLoop - AI-Powered Retail Recovery",
+  description:
+    "Rethink how retail handles returns and resupply—cut costs, reduce landfill waste, and make the resale economy intelligent.",
     generator: 'v0.dev'
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="light">
           {children}
           <Toaster />
         </ThemeProvider>

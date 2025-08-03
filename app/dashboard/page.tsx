@@ -1,395 +1,206 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Header } from "@/components/layout/header"
-import { StatsCards } from "@/components/dashboard/stats-cards"
-import { POForm } from "@/components/purchase-orders/po-form"
-import { AddReturnForm } from "@/components/returns/add-return-form"
-import { AddSupplierForm } from "@/components/suppliers/add-supplier-form"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Users, ShoppingCart, Loader2, Trash2 } from "lucide-react"
-import { mockAnalytics } from "@/lib/mock-data"
+import { TrendingUp, Package, DollarSign, Clock, Recycle, Eye, FileText } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/hooks/use-toast"
-import { getCurrentUser } from "@/lib/auth"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import Link from "next/link"
 
-export default function DashboardPage() {
-  const [suppliers, setSuppliers] = useState([])
-  const [buyers, setBuyers] = useState([])
-  const [purchaseOrders, setPurchaseOrders] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showPOForm, setShowPOForm] = useState(false)
-  const [showReturnForm, setShowReturnForm] = useState(false)
-  const [showSupplierForm, setShowSupplierForm] = useState(false)
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string>()
-  const [showDeleteSupplierConfirm, setShowDeleteSupplierConfirm] = useState(false)
-  const [supplierToDelete, setSupplierToDelete] = useState<string | null>(null)
-  const { toast } = useToast()
+// Import our module components
+import RestockPredictor from "@/components/modules/restock-predictor"
+import SupplierBenchmark from "@/components/modules/supplier-benchmark"
+import POGenerator from "@/components/modules/po-generator"
+import ReturnIntake from "@/components/modules/return-intake"
+import ResaleTracker from "@/components/modules/resale-tracker"
+import AnalyticsDashboard from "@/components/modules/analytics-dashboard"
+import ReturnsManagementPage from "@/app/dashboard/returns/page"
+import OrderManagementPage from "@/app/dashboard/orders/page" // Import the new OrderManagementPage
+
+export default function Dashboard() {
+  const [user, setUser] = useState<any>(null)
+  const [stats, setStats] = useState({
+    totalReturns: 0,
+    activeOrders: 0,
+    resaleListings: 0,
+    monthlyRevenue: 0,
+  })
   const router = useRouter()
+  const { toast } = useToast()
 
   useEffect(() => {
-    const checkAuthAndLoadData = async () => {
-      setLoading(true)
-      const user = await getCurrentUser()
-      if (!user) {
-        router.push("/login")
-        return
-      }
-      await loadData()
-      setLoading(false)
-    }
-    checkAuthAndLoadData()
-  }, [router])
+    checkUser()
+    loadDashboardStats()
+  }, [])
 
-  const loadData = async () => {
+  const checkUser = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      router.push("/auth")
+      return
+    }
+    setUser(user)
+  }
+
+  const loadDashboardStats = async () => {
+    // Load dashboard statistics
     try {
-      const { data: suppliersData } = await supabase
-        .from("suppliers")
-        .select("*")
-        .order("sla_rating", { ascending: false })
+      const { data: returns } = await supabase.from("returns").select("*")
 
-      const { data: buyersData } = await supabase.from("buyers").select("*").order("created_at", { ascending: false })
-      const { data: poData } = await supabase
-        .from("purchase_orders")
-        .select("*, suppliers(name), buyers(name)") // Select buyer name too
-        .order("created_at", { ascending: false })
+      const { data: orders } = await supabase.from("purchase_orders").select("*").eq("status", "active")
 
-      setSuppliers(suppliersData || [])
-      setBuyers(buyersData || [])
-      setPurchaseOrders(poData || [])
+      setStats({
+        totalReturns: returns?.length || 0,
+        activeOrders: orders?.length || 0,
+        resaleListings: 45, // Mock data
+        monthlyRevenue: 12500, // Mock data
+      })
     } catch (error) {
-      console.error("Error loading data:", error)
-      toast({
-        title: "Data Load Error",
-        description: "Failed to load dashboard data.",
-        variant: "destructive",
-      })
+      console.error("Error loading stats:", error)
     }
   }
 
-  const handleCreatePO = (supplierId?: string) => {
-    setSelectedSupplierId(supplierId)
-    setShowPOForm(true)
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push("/")
   }
 
-  const handlePOSubmit = async (data: any) => {
-    try {
-      const poNumber = `PO-${Date.now()}`
-      const { error } = await supabase.from("purchase_orders").insert({
-        po_number: poNumber,
-        supplier_id: data.supplierId,
-        buyer_id: data.buyerId || null, // Add buyerId
-        subject: data.subject,
-        items: data.items,
-        negotiation_terms: data.negotiationTerms,
-        total_amount: data.items.reduce((sum: number, item: any) => sum + item.quantity * item.price, 0),
-        items_count: data.items.length,
-        status: "draft",
-      })
-
-      if (error) throw error
-
-      toast({
-        title: "Success",
-        description: "Purchase order created successfully",
-      })
-
-      setShowPOForm(false)
-      loadData()
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create purchase order",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleReturnSubmit = async (data: any) => {
-    try {
-      const { error } = await supabase.from("return_items").insert({
-        order_id: data.order_id,
-        product_id: data.sku, // Map sku to product_id
-        product_name: data.productName,
-        return_reason: data.returnReason,
-        purchase_date: data.purchaseDate,
-        category: data.category,
-        notes: data.notes,
-        condition: data.condition, // New field
-        images: data.images || [], // New field
-        eligibility_status: "pending",
-      })
-
-      if (error) throw error
-
-      toast({
-        title: "Success",
-        description: "Return item added successfully!",
-      })
-
-      setShowReturnForm(false)
-      // No need to load return items here, ReturnsManagerPage handles it
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to add return item",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleSupplierSubmit = async (data: any) => {
-    try {
-      const { error } = await supabase.from("suppliers").insert({
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        address: data.address,
-        region: data.region,
-        avg_delivery_days: data.deliverySpeed, // Map deliverySpeed to avg_delivery_days
-        price_rating: data.priceRating,
-        sla_rating: data.slaRating,
-        rating: (data.priceRating + data.slaRating) / 2, // Simple average for overall rating
-        price_competitiveness: Math.floor(Math.random() * 50) + 50, // Mock 50-100
-        reliability_score: Math.floor(Math.random() * 50) + 50, // Mock 50-100
-        total_orders: Math.floor(Math.random() * 100), // Mock total orders
-      })
-
-      if (error) throw error
-
-      toast({
-        title: "Success",
-        description: "Supplier added successfully",
-      })
-
-      setShowSupplierForm(false)
-      loadData()
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to add supplier",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleDeleteSupplier = async () => {
-    if (!supplierToDelete) return
-
-    try {
-      const { error } = await fetch(`/api/suppliers/${supplierToDelete}`, {
-        method: "DELETE",
-      })
-
-      if (error) throw error
-
-      toast({
-        title: "Success",
-        description: "Supplier deleted successfully.",
-      })
-      loadData()
-    } catch (error) {
-      console.error("Error deleting supplier:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete supplier.",
-        variant: "destructive",
-      })
-    } finally {
-      setShowDeleteSupplierConfirm(false)
-      setSupplierToDelete(null)
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    const statusColors = {
-      draft: "bg-gray-100 text-gray-800",
-      sent: "bg-blue-100 text-blue-800",
-      confirmed: "bg-green-100 text-green-800",
-      delivered: "bg-purple-100 text-purple-800",
-      received: "bg-green-100 text-green-800",
-      cancelled: "bg-red-100 text-red-800",
-      pending: "bg-yellow-100 text-yellow-800",
-    }
-    return (
-      <Badge className={statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800"}>
-        {status}
-      </Badge>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-      </div>
-    )
-  }
-
-  if (showPOForm) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="p-6">
-          <POForm
-            suppliers={suppliers}
-            buyers={buyers} // Pass buyers to POForm
-            onSubmit={handlePOSubmit}
-            onCancel={() => setShowPOForm(false)}
-            initialSupplierId={selectedSupplierId}
-          />
-        </div>
-      </div>
-    )
-  }
-
-  if (showReturnForm) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="p-6">
-          <AddReturnForm onSubmit={handleReturnSubmit} onCancel={() => setShowReturnForm(false)} />
-        </div>
-      </div>
-    )
-  }
-
-  if (showSupplierForm) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="p-6">
-          <AddSupplierForm onSubmit={handleSupplierSubmit} onCancel={() => setShowSupplierForm(false)} />
-        </div>
-      </div>
-    )
+  if (!user) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
-
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <div className="flex space-x-2">
-            <Button onClick={() => setShowSupplierForm(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Supplier
-            </Button>
-            <Button onClick={() => setShowReturnForm(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Return
-            </Button>
-            <Button onClick={() => handleCreatePO()} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Create PO
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <Recycle className="h-8 w-8 text-green-600" />
+            <span className="text-2xl font-bold text-gray-900">ReLoop</span>
+            <Badge variant="secondary">Dashboard</Badge>
+          </div>
+          <div className="flex items-center space-x-4">
+            <span className="text-sm text-gray-600">Welcome, {user.email}</span>
+            <Button variant="outline" onClick={handleSignOut}>
+              Sign Out
             </Button>
           </div>
         </div>
+      </header>
 
-        <StatsCards stats={mockAnalytics} />
+      <div className="container mx-auto px-4 py-8">
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Returns</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalReturns}</div>
+              <p className="text-xs text-muted-foreground">+12% from last month</p>
+            </CardContent>
+          </Card>
 
-        <Tabs defaultValue="suppliers" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="suppliers" className="flex items-center space-x-2">
-              <Users className="h-4 w-4" />
-              <span>Suppliers</span>
-            </TabsTrigger>
-            <TabsTrigger value="orders" className="flex items-center space-x-2">
-              <ShoppingCart className="h-4 w-4" />
-              <span>Orders</span>
-            </TabsTrigger>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Orders</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.activeOrders}</div>
+              <p className="text-xs text-muted-foreground">3 pending approval</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Resale Listings</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.resaleListings}</div>
+              <p className="text-xs text-muted-foreground">8 sold this week</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">${stats.monthlyRevenue.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">+8% from last month</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Modules */}
+        <Tabs defaultValue="returns" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="returns">Returns & Resale</TabsTrigger>
+            <TabsTrigger value="supplier">Supplier Intelligence</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="returns-management">Returns Management</TabsTrigger>
+            <TabsTrigger value="order-management">Order Management</TabsTrigger> {/* New Tab Trigger */}
           </TabsList>
 
-          <TabsContent value="suppliers" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Suppliers</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {suppliers.map((supplier: any) => (
-                    <div key={supplier.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <h4 className="font-medium">{supplier.name}</h4>
-                        <p className="text-sm text-muted-foreground">{supplier.email}</p>
-                        <div className="flex items-center space-x-4 mt-1 text-xs text-muted-foreground">
-                          <span>{supplier.region}</span>
-                          <span>{supplier.avg_delivery_days} days</span>
-                          <span>Price: {supplier.price_rating}/5</span>
-                          <span>SLA: {supplier.sla_rating}/5</span>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" onClick={() => handleCreatePO(supplier.id)}>
-                          Create PO
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => {
-                            setSupplierToDelete(supplier.id)
-                            setShowDeleteSupplierConfirm(true)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+          {/* Returns & Resale Module */}
+          <TabsContent value="returns" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ReturnIntake />
+              <ResaleTracker />
+            </div>
+            {/* Link to the dedicated Returns Management page */}
+            <div className="flex justify-center mt-6">
+              <Link href="/dashboard/returns">
+                <Button variant="outline">
+                  <Eye className="h-4 w-4 mr-2" /> View All Returns
+                </Button>
+              </Link>
+            </div>
           </TabsContent>
 
-          <TabsContent value="orders" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Purchase Orders</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {purchaseOrders.map((po: any) => (
-                    <div key={po.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <div className="flex items-center space-x-2 mb-1">
-                          <h4 className="font-medium">{po.po_number}</h4>
-                          {getStatusBadge(po.status)}
-                        </div>
-                        <p className="text-sm text-muted-foreground">{po.subject}</p>
-                        <div className="flex items-center space-x-4 mt-1 text-xs text-muted-foreground">
-                          <span>Supplier: {po.suppliers?.name}</span>
-                          <span>Buyer: {po.buyers?.name || "N/A"}</span>
-                          <span>Total: ${po.total_amount?.toFixed(2)}</span>
-                          <span>Items: {po.items_count}</span>
-                        </div>
-                      </div>
-                      <Button size="sm" asChild>
-                        <Link href={`/purchase-orders/${po.id}`}>View Details</Link>
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+          {/* Supplier Intelligence Module */}
+          <TabsContent value="supplier" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <RestockPredictor />
+              <SupplierBenchmark />
+            </div>
+            <POGenerator />
+            {/* Link to the dedicated Order Management page */}
+            <div className="flex justify-center mt-6">
+              <Link href="/dashboard/orders">
+                <Button variant="outline">
+                  <FileText className="h-4 w-4 mr-2" /> View All Orders
+                </Button>
+              </Link>
+            </div>
+          </TabsContent>
+
+          {/* Analytics Module */}
+          <TabsContent value="analytics">
+            <AnalyticsDashboard />
+          </TabsContent>
+
+          {/* Returns Management Module */}
+          <TabsContent value="returns-management">
+            <ReturnsManagementPage />
+          </TabsContent>
+
+          {/* Order Management Module */}
+          <TabsContent value="order-management">
+            <OrderManagementPage /> {/* Render the new OrderManagementPage component here */}
           </TabsContent>
         </Tabs>
       </div>
-
-      <ConfirmationDialog
-        isOpen={showDeleteSupplierConfirm}
-        onClose={() => setShowDeleteSupplierConfirm(false)}
-        onConfirm={handleDeleteSupplier}
-        title="Confirm Deletion"
-        description="Are you sure you want to delete this supplier? This action cannot be undone."
-      />
     </div>
   )
 }
