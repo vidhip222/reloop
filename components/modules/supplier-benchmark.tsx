@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { AlertTriangle, TrendingUp, TrendingDown, Flag, CheckCircle } from "lucide-react"
 import { supabase } from "@/lib/supabase"
@@ -11,14 +12,24 @@ import { supabase } from "@/lib/supabase"
 export default function SupplierBenchmark() {
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [tenantId, setTenantId] = useState("")
 
   useEffect(() => {
-    loadSuppliers()
-  }, [])
+    if (tenantId) {
+      loadSuppliers()
+    } else {
+      setSuppliers([])
+      setIsLoading(false)
+    }
+  }, [tenantId])
 
   const loadSuppliers = async () => {
     try {
-      const { data, error } = await supabase.from("suppliers").select("*").order("sla_grade", { ascending: false })
+      let query = supabase.from("suppliers").select("*").order("sla_grade", { ascending: false })
+      if (tenantId) {
+        query = query.eq("tenant_id", tenantId)
+      }
+      const { data, error } = await query
 
       if (error) throw error
       setSuppliers(data || [])
@@ -85,6 +96,14 @@ export default function SupplierBenchmark() {
         <CardDescription>Live supplier performance metrics and quality scoring</CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 space-y-2">
+          <label className="text-sm font-medium">Tenant ID</label>
+          <Input
+            value={tenantId}
+            onChange={(e) => setTenantId(e.target.value)}
+            placeholder="Tenant UUID"
+          />
+        </div>
         {/* Gemini Insights */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-2">

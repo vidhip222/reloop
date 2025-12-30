@@ -106,13 +106,46 @@
 
 ---
 
-## 📦 Local Setup
+## Local Setup
+
+Frontend:
 
 ```bash
-git clone https://github.com/vidhip222/reloop.git
-cd reloop
 pnpm install
 pnpm dev
+```
 
-git clone https://github.com/vidhip222/reloop.git
-cd reloop
+Backend (FastAPI):
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+## Env Vars Checklist
+
+Frontend:
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+- NEXT_PUBLIC_API_BASE_URL (example: http://localhost:8000)
+- GEMINI_API_KEY
+- RESEND_API_KEY
+- EBAY_CLIENT_ID
+- EBAY_CLIENT_SECRET
+
+Backend:
+- SUPABASE_URL
+- SUPABASE_ANON_KEY
+- SUPABASE_STORAGE_BUCKET
+- GEMINI_API_KEY
+- STRIPE_SECRET_KEY
+- EBAY_CLIENT_ID
+- EBAY_CLIENT_SECRET
+
+## Environment Files
+
+- Frontend: copy `.env.local.example` to `.env.local`
+- Backend: copy `backend/.env.example` to `backend/.env`

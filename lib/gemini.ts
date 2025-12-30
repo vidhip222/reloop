@@ -46,17 +46,27 @@ export async function classifyReturn(
     
     Respond in JSON format:
     {
-      "action": "one_word_action",
+      "tag": "Relist|Donate|Recycle|Refund|Outlet|Resale|Review",
+      "rationale": "Brief explanation of why this action was chosen",
       "confidence": 0.85,
-      "reasoning": "Brief explanation of why this action was chosen",
-      "resale_platform": "suggested platform if action is Resale"
+      "resale_channel": "suggested platform if tag is Resale",
+      "suggested_price": 29.99,
+      "notes": "optional"
     }
   `
 
   try {
     const result = await model.generateContent(prompt)
     const response = result.response.text()
-    return parseGeminiResponse(response)
+    const parsed = parseGeminiResponse(response)
+    return {
+      action: parsed.tag || parsed.action,
+      confidence: parsed.confidence,
+      reasoning: parsed.rationale || parsed.reasoning,
+      resale_platform: parsed.resale_channel || parsed.resale_platform || null,
+      suggested_price: parsed.suggested_price || null,
+      notes: parsed.notes || null,
+    }
   } catch (error) {
     console.error("Gemini classification error:", error)
     return {
@@ -64,6 +74,8 @@ export async function classifyReturn(
       confidence: 0.1,
       reasoning: "AI classification failed, manual review required",
       resale_platform: null,
+      suggested_price: null,
+      notes: null,
     }
   }
 }

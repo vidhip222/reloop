@@ -3,11 +3,10 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ShoppingCart, ExternalLink, RefreshCw } from "lucide-react"
-import { EbayAPI } from "@/lib/ebay-api"
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/hooks/use-toast"
 
@@ -15,21 +14,32 @@ export default function ResaleTracker() {
   const [returns, setReturns] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isListing, setIsListing] = useState<string | null>(null)
+  const [tenantId, setTenantId] = useState("")
   const { toast } = useToast()
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
   useEffect(() => {
-    loadProcessedReturns()
-  }, [])
+    if (tenantId) {
+      loadProcessedReturns()
+    } else {
+      setReturns([])
+      setIsLoading(false)
+    }
+  }, [tenantId])
 
   const loadProcessedReturns = async () => {
     try {
       // Fetch all returns that are in a processed or listed state
-      const { data, error } = await supabase
+      let query = supabase
         .from("returns")
         .select("*")
-        .in("status", ["processed", "listed_ebay", "exported", "sold"]) // Fetch all relevant statuses
+        .in("status", ["processed", "listed_ebay", "exported", "sold"])
         .order("created_at", { ascending: false })
-        .limit(10) // Still limit for performance
+        .limit(10)
+      if (tenantId) {
+        query = query.eq("tenant_id", tenantId)
+      }
+      const { data, error } = await query
 
       if (error) throw error
 
@@ -47,30 +57,39 @@ export default function ResaleTracker() {
     }
   }
 
+  const getAuthHeader = async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
   const handleEbayListing = async (returnItem: any) => {
     setIsListing(returnItem.id)
     try {
-      const ebayAPI = new EbayAPI()
-
       const listingData = {
         title: `${returnItem.sku} - Quality Return Item`,
         description: `Returned item in good condition. Reason: ${returnItem.return_reason}`,
-        price: 29.99, // Mock price - in production, calculate based on original price
-        category: "1234", // Mock category
+        price: 29.99,
+        category: "1234",
         images: [returnItem.image_url],
         condition: "Used",
       }
-
-      const result = await ebayAPI.createListing(listingData)
+      const headers = await getAuthHeader()
+      const response = await fetch(`${apiBase}/returns/${returnItem.id}/list/ebay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(listingData),
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      const result = await response.json()
 
       if (result.success) {
         toast({
           title: "eBay Listing Created",
-          description: `Item listed successfully. ID: ${result.itemId}`,
+          description: `Item listed successfully. ID: ${result.item_id || "pending"}`,
         })
-
-        // Update return status
-        await supabase.from("returns").update({ status: "listed_ebay" }).eq("id", returnItem.id)
 
         loadProcessedReturns()
       } else {
@@ -87,22 +106,34 @@ export default function ResaleTracker() {
     }
   }
 
-  const handleManualExport = (returnItem: any, platform: string) => {
-    // Generate CSV export for manual listing
-    const csvData = `SKU,Title,Description,Price,Condition,Image URL
-${returnItem.sku},"${returnItem.sku} - Return Item","Returned: ${returnItem.return_reason}",29.99,Used,${returnItem.image_url}`
-
-    const blob = new Blob([csvData], { type: "text/csv" })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${platform}_export_${returnItem.sku}.csv`
-    a.click()
-
-    toast({
-      title: "Export Generated",
-      description: `CSV file ready for ${platform} manual upload`,
-    })
+  const handleThredUpExport = async (returnItem: any) => {
+    try {
+      const headers = await getAuthHeader()
+      const response = await fetch(`${apiBase}/returns/${returnItem.id}/export/thredup`, {
+        method: "POST",
+        headers: { ...headers },
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      const csvText = await response.text()
+      const blob = new Blob([csvText], { type: "text/csv" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `thredup_export_${returnItem.sku}.csv`
+      a.click()
+      toast({
+        title: "Export Generated",
+        description: "ThredUp CSV downloaded.",
+      })
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Could not export for ThredUp.",
+        variant: "destructive",
+      })
+    }
   }
 
   const getActionColor = (action: string) => {
@@ -147,6 +178,14 @@ ${returnItem.sku},"${returnItem.sku} - Return Item","Returned: ${returnItem.retu
         <CardDescription>Manage and track resale listings across platforms</CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 space-y-2">
+          <label className="text-sm font-medium">Tenant ID</label>
+          <Input
+            value={tenantId}
+            onChange={(e) => setTenantId(e.target.value)}
+            placeholder="Tenant UUID"
+          />
+        </div>
         {/* Platform Sync Status */}
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
           <div className="flex items-center justify-between">
@@ -208,6 +247,9 @@ ${returnItem.sku},"${returnItem.sku} - Return Item","Returned: ${returnItem.retu
                             disabled={isListing === returnItem.id}
                           >
                             {isListing === returnItem.id ? "Listing..." : "List on eBay"}
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handleThredUpExport(returnItem)}>
+                            Export ThredUp
                           </Button>
                         </>
                       )}

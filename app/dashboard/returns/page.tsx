@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Filter, Download, Search, Eye, Flag, Recycle } from "lucide-react"
 import { supabase } from "@/lib/supabase"
@@ -17,9 +18,16 @@ export default function ReturnsManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [tenantId, setTenantId] = useState("")
   const [selectedReturn, setSelectedReturn] = useState<any>(null) // State for selected return for modal
   const [isModalOpen, setIsModalOpen] = useState(false) // State to control modal visibility
+  const [routeChannel, setRouteChannel] = useState("eBay")
+  const [refundAmount, setRefundAmount] = useState("")
+  const [paymentIntentId, setPaymentIntentId] = useState("")
+  const [bulkFile, setBulkFile] = useState<File | null>(null)
+  const [isBulkUploading, setIsBulkUploading] = useState(false)
   const { toast } = useToast()
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
   const handleMarkAsProcessed = async (returnId: string) => {
     try {
@@ -49,7 +57,7 @@ export default function ReturnsManagementPage() {
 
   useEffect(() => {
     loadReturns()
-  }, [filterStatus])
+  }, [filterStatus, tenantId])
 
   const loadReturns = async () => {
     setIsLoading(true)
@@ -58,6 +66,9 @@ export default function ReturnsManagementPage() {
 
       if (filterStatus !== "all") {
         query = query.eq("status", filterStatus)
+      }
+      if (tenantId) {
+        query = query.eq("tenant_id", tenantId)
       }
 
       const { data, error } = await query
@@ -153,6 +164,76 @@ export default function ReturnsManagementPage() {
     setIsModalOpen(true)
   }
 
+  const getAuthHeader = async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
+  const handleRoute = async () => {
+    if (!selectedReturn) return
+    try {
+      const headers = await getAuthHeader()
+      const response = await fetch(`${apiBase}/returns/${selectedReturn.id}/route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ channel: routeChannel }),
+      })
+      if (!response.ok) throw new Error(await response.text())
+      toast({ title: "Routing Updated", description: `Routed to ${routeChannel}.` })
+    } catch (error) {
+      toast({ title: "Routing Failed", description: "Could not update routing.", variant: "destructive" })
+    }
+  }
+
+  const handleRefund = async () => {
+    if (!selectedReturn || !refundAmount || !paymentIntentId) return
+    try {
+      const headers = await getAuthHeader()
+      const response = await fetch(`${apiBase}/returns/${selectedReturn.id}/refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({
+          amount: Number(refundAmount),
+          payment_intent_id: paymentIntentId,
+        }),
+      })
+      if (!response.ok) throw new Error(await response.text())
+      toast({ title: "Refund Triggered", description: "Stripe refund requested." })
+      loadReturns()
+    } catch (error) {
+      toast({ title: "Refund Failed", description: "Could not trigger refund.", variant: "destructive" })
+    }
+  }
+
+  const handleBulkUpload = async () => {
+    if (!bulkFile || !tenantId) {
+      toast({ title: "Missing Data", description: "Tenant ID and CSV file are required.", variant: "destructive" })
+      return
+    }
+    setIsBulkUploading(true)
+    try {
+      const headers = await getAuthHeader()
+      const formData = new FormData()
+      formData.append("tenant_id", tenantId)
+      formData.append("file", bulkFile)
+      const response = await fetch(`${apiBase}/returns/bulk-intake`, {
+        method: "POST",
+        headers,
+        body: formData,
+      })
+      if (!response.ok) throw new Error(await response.text())
+      const result = await response.json()
+      toast({ title: "Bulk Intake Started", description: `Batch ${result.batch_id} (${result.count} rows)` })
+      setBulkFile(null)
+      loadReturns()
+    } catch (error) {
+      toast({ title: "Bulk Upload Failed", description: "Could not process CSV.", variant: "destructive" })
+    } finally {
+      setIsBulkUploading(false)
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <Card>
@@ -195,6 +276,24 @@ export default function ReturnsManagementPage() {
             <Button onClick={handleExportUnlistedReturns} variant="outline">
               <Download className="h-4 w-4 mr-2" />
               Export Unlisted CSV
+            </Button>
+          </div>
+          <div className="mb-6">
+            <Label htmlFor="tenantId">Tenant ID</Label>
+            <Input
+              id="tenantId"
+              value={tenantId}
+              onChange={(e) => setTenantId(e.target.value)}
+              placeholder="Tenant UUID"
+            />
+          </div>
+          <div className="mb-6 flex flex-col md:flex-row gap-3 items-start md:items-end">
+            <div className="space-y-2 w-full">
+              <Label>Bulk CSV Upload</Label>
+              <Input type="file" accept=".csv" onChange={(e) => setBulkFile(e.target.files?.[0] || null)} />
+            </div>
+            <Button onClick={handleBulkUpload} disabled={isBulkUploading} className="md:w-48">
+              {isBulkUploading ? "Uploading..." : "Upload CSV"}
             </Button>
           </div>
 
@@ -319,6 +418,42 @@ export default function ReturnsManagementPage() {
               <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                 <h4 className="font-semibold mb-1">AI Reasoning:</h4>
                 <p className="text-sm text-gray-700">{selectedReturn.ai_reasoning}</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Resale Routing</Label>
+                  <Select value={routeChannel} onValueChange={setRouteChannel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select channel" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-green-50">
+                      <SelectItem value="eBay">eBay</SelectItem>
+                      <SelectItem value="ThredUp">ThredUp</SelectItem>
+                      <SelectItem value="Depop">Depop</SelectItem>
+                      <SelectItem value="Poshmark">Poshmark</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={handleRoute} variant="outline" className="w-full">
+                    Save Routing
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label>Refund Trigger</Label>
+                  <Input
+                    placeholder="Payment Intent ID"
+                    value={paymentIntentId}
+                    onChange={(e) => setPaymentIntentId(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Refund amount"
+                    type="number"
+                    value={refundAmount}
+                    onChange={(e) => setRefundAmount(e.target.value)}
+                  />
+                  <Button onClick={handleRefund} className="w-full">
+                    Trigger Refund
+                  </Button>
+                </div>
               </div>
             </div>
           )}

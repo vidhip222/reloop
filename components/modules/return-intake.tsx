@@ -17,6 +17,7 @@ import { useActionState } from "react"
 export default function ReturnIntake() {
   const [fileInputKey, setFileInputKey] = useState(0)
   const [formData, setFormData] = useState({
+    tenantId: "",
     sku: "",
     brand: "",
     returnReason: "",
@@ -26,6 +27,7 @@ export default function ReturnIntake() {
   const [aiResult, setAiResult] = useState<any>(null)
   const [showReasoning, setShowReasoning] = useState(false)
   const [manualOverride, setManualOverride] = useState("")
+  const [manualOverrideReason, setManualOverrideReason] = useState("")
   const [relistPlatform, setRelistPlatform] = useState("") // New state for relist platform
   const { toast } = useToast()
   const formRef = useRef<HTMLFormElement>(null)
@@ -64,9 +66,10 @@ export default function ReturnIntake() {
         description: result.message,
       })
       // Reset form
-      setFormData({ sku: "", brand: "", returnReason: "", tags: "", imageUrl: "" })
+      setFormData({ tenantId: "", sku: "", brand: "", returnReason: "", tags: "", imageUrl: "" })
       setAiResult(null)
       setManualOverride("")
+      setManualOverrideReason("")
       setRelistPlatform("") // Reset relist platform
       formRef.current?.reset() // Reset the form fields
       if (fileInputRef.current) {
@@ -167,7 +170,18 @@ export default function ReturnIntake() {
           </div>
 
           {/* Product Details */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenantId">Tenant ID *</Label>
+              <Input
+                id="tenantId"
+                name="tenantId"
+                value={formData.tenantId}
+                onChange={(e) => setFormData((prev) => ({ ...prev, tenantId: e.target.value }))}
+                placeholder="Tenant UUID"
+                required
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="sku">SKU *</Label>
               <Input
@@ -232,12 +246,16 @@ export default function ReturnIntake() {
 
         {aiResult && (
           <form action={processAction} className="mt-4 space-y-3">
+            <Input type="hidden" name="tenantId" value={formData.tenantId} />
             <Input type="hidden" name="sku" value={formData.sku} />
             <Input type="hidden" name="returnReason" value={formData.returnReason} />
             <Input type="hidden" name="imageUrl" value={formData.imageUrl} />
+            <Input type="hidden" name="brand" value={formData.brand} />
+            <Input type="hidden" name="tags" value={formData.tags} />
             <Input type="hidden" name="aiAction" value={aiResult.action} />
             <Input type="hidden" name="aiConfidence" value={aiResult.confidence} />
             <Input type="hidden" name="aiReasoning" value={aiResult.reasoning} />
+            <Input type="hidden" name="manualOverrideReason" value={manualOverrideReason} />
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -272,6 +290,9 @@ export default function ReturnIntake() {
                   if (value !== "Relist") {
                     setRelistPlatform("") // Clear relist platform if not "Relist"
                   }
+                  if (!value) {
+                    setManualOverrideReason("")
+                  }
                 }}
                 name="manualOverride"
                 value={manualOverride}
@@ -290,6 +311,17 @@ export default function ReturnIntake() {
                 </SelectContent>
               </Select>
             </div>
+            {manualOverride && (
+              <div className="space-y-2">
+                <Label htmlFor="manualOverrideReason">Override Reason</Label>
+                <Input
+                  id="manualOverrideReason"
+                  value={manualOverrideReason}
+                  onChange={(e) => setManualOverrideReason(e.target.value)}
+                  placeholder="Explain why you are overriding AI"
+                />
+              </div>
+            )}
 
             {/* Conditional Relist Platform */}
             {shouldShowRelistPlatform() && (

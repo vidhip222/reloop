@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Filter, Search, FileText, Lightbulb, ChevronDown } from "lucide-react"
 import { supabase } from "@/lib/supabase"
@@ -17,11 +18,12 @@ export default function OrderManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [tenantId, setTenantId] = useState("")
   const { toast } = useToast()
 
   useEffect(() => {
     loadOrders()
-  }, [filterStatus])
+  }, [filterStatus, tenantId])
 
   const loadOrders = async () => {
     setIsLoading(true)
@@ -33,6 +35,9 @@ export default function OrderManagementPage() {
 
       if (filterStatus !== "all") {
         query = query.eq("status", filterStatus)
+      }
+      if (tenantId) {
+        query = query.eq("tenant_id", tenantId)
       }
 
       const { data, error } = await query
@@ -102,6 +107,15 @@ export default function OrderManagementPage() {
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="mb-6">
+            <Label htmlFor="tenantId">Tenant ID</Label>
+            <Input
+              id="tenantId"
+              value={tenantId}
+              onChange={(e) => setTenantId(e.target.value)}
+              placeholder="Tenant UUID"
+            />
           </div>
 
           {isLoading ? (

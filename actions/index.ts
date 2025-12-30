@@ -83,17 +83,18 @@ export async function predictRestockAction(formData: FormData) {
 export async function suggestPOTermsAction(formData: FormData) {
   const supplierId = formData.get("supplierId") as string
   const sku = formData.get("sku") as string
+  const tenantId = formData.get("tenantId") as string
 
   if (!supplierId || !sku) {
     return { success: false, message: "Supplier and SKU are required." }
   }
 
   try {
-    const { data: supplier, error: supplierError } = await supabase
-      .from("suppliers")
-      .select("*")
-      .eq("id", supplierId)
-      .single()
+    let query = supabase.from("suppliers").select("*").eq("id", supplierId)
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId)
+    }
+    const { data: supplier, error: supplierError } = await query.single()
 
     if (supplierError || !supplier) {
       throw new Error(supplierError?.message || "Supplier not found.")
@@ -116,13 +117,21 @@ export async function suggestPOTermsAction(formData: FormData) {
 
 export async function processReturnAction(formData: FormData) {
   const sku = formData.get("sku") as string
+  const brand = formData.get("brand") as string
   const returnReason = formData.get("returnReason") as string
   const imageUrl = formData.get("imageUrl") as string
+  const tags = (formData.get("tags") as string) || ""
   const aiAction = formData.get("aiAction") as string
   const aiConfidence = Number(formData.get("aiConfidence"))
   const aiReasoning = formData.get("aiReasoning") as string
   const manualOverride = formData.get("manualOverride") as string | null
+  const manualOverrideReason = formData.get("manualOverrideReason") as string | null
   const relistPlatform = formData.get("relistPlatform") as string | null // New field
+  const tenantId = formData.get("tenantId") as string
+
+  if (!tenantId) {
+    return { success: false, message: "Tenant ID is required." }
+  }
 
   try {
     const {
@@ -132,12 +141,21 @@ export async function processReturnAction(formData: FormData) {
 
     const { error } = await supabase.from("returns").insert([
       {
+        tenant_id: tenantId || null,
         sku,
+        brand: brand || null,
         return_reason: returnReason,
         image_url: imageUrl,
         ai_action: aiAction,
         ai_confidence: aiConfidence,
         ai_reasoning: aiReasoning,
+        metadata: {
+          tags: tags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0),
+          manual_override_reason: manualOverrideReason || null,
+        },
         manual_override: manualOverride || null,
         status: manualOverride || aiAction === "Review" ? "flagged" : "processed", // Set status to 'flagged' if overridden or AI suggests 'Review'
         user_id: user.id,
@@ -146,6 +164,20 @@ export async function processReturnAction(formData: FormData) {
     ])
 
     if (error) throw error
+    await supabase.from("audit_log").insert([
+      {
+        tenant_id: tenantId,
+        action: "return_processed",
+        entity_type: "returns",
+        payload: {
+          sku,
+          ai_action: aiAction,
+          manual_override: manualOverride,
+          manual_override_reason: manualOverrideReason,
+          relist_platform: relistPlatform,
+        },
+      },
+    ])
 
     // If the item is flagged for review, send an email notification
     if (manualOverride || aiAction === "Review") {
@@ -173,8 +205,9 @@ export async function savePOAction(formData: FormData) {
   const notes = formData.get("notes") as string
   const status = formData.get("status") as "draft" | "sent"
   const aiSuggestions = formData.get("aiSuggestions") as string // Stringified JSON
+  const tenantId = formData.get("tenantId") as string
 
-  if (!supplierId || !sku || isNaN(quantity) || isNaN(unitPrice)) {
+  if (!supplierId || !sku || isNaN(quantity) || isNaN(unitPrice) || !tenantId) {
     return { success: false, message: "Supplier, SKU, quantity, and unit price are required." }
   }
 
@@ -189,6 +222,7 @@ export async function savePOAction(formData: FormData) {
 
     const { error } = await supabase.from("purchase_orders").insert([
       {
+        tenant_id: tenantId || null,
         supplier_id: supplierId,
         sku: sku,
         quantity: quantity,
@@ -201,6 +235,19 @@ export async function savePOAction(formData: FormData) {
     ])
 
     if (error) throw error
+    await supabase.from("audit_log").insert([
+      {
+        tenant_id: tenantId,
+        action: "purchase_order_saved",
+        entity_type: "purchase_orders",
+        payload: {
+          supplier_id: supplierId,
+          sku,
+          quantity,
+          status,
+        },
+      },
+    ])
 
     if (status === "sent") {
       await sendNotificationEmail(

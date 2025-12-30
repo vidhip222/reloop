@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -18,9 +18,39 @@ import {
   Line,
 } from "recharts"
 import { TrendingUp, TrendingDown, DollarSign, Package, Recycle, AlertTriangle } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { supabase } from "@/lib/supabase"
 
 export default function AnalyticsDashboard() {
-  const [timeRange, setTimeRange] = useState("30d")
+  const [tenantId, setTenantId] = useState("")
+  const [metrics, setMetrics] = useState<any>(null)
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ""
+
+  useEffect(() => {
+    const loadMetrics = async () => {
+      if (!tenantId) {
+        setMetrics(null)
+        return
+      }
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      const headers = token ? { Authorization: `Bearer ${token}` } : {}
+      const [recoveryRes, sustainabilityRes, roiRes] = await Promise.all([
+        fetch(`${apiBase}/dashboards/recovery?tenant_id=${tenantId}`, { headers }),
+        fetch(`${apiBase}/dashboards/sustainability?tenant_id=${tenantId}`, { headers }),
+        fetch(`${apiBase}/dashboards/roi?tenant_id=${tenantId}`, { headers }),
+      ])
+      if (recoveryRes.ok && sustainabilityRes.ok && roiRes.ok) {
+        const [recovery, sustainability, roi] = await Promise.all([
+          recoveryRes.json(),
+          sustainabilityRes.json(),
+          roiRes.json(),
+        ])
+        setMetrics({ recovery, sustainability, roi })
+      }
+    }
+    loadMetrics()
+  }, [tenantId, apiBase])
 
   // Mock data - in production, fetch from database
   const returnFunnelData = [
@@ -73,6 +103,10 @@ export default function AnalyticsDashboard() {
 
   return (
     <div className="space-y-6">
+      <div className="max-w-sm space-y-2">
+        <label className="text-sm font-medium">Tenant ID</label>
+        <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="Tenant UUID" />
+      </div>
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
@@ -81,9 +115,11 @@ export default function AnalyticsDashboard() {
             <Recycle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">94%</div>
-            <p className="text-xs text-muted-foreground">+6% from last month</p>
-            <Progress value={94} className="mt-2" />
+            <div className="text-2xl font-bold">
+              {metrics ? Math.round(metrics.recovery.recovery_rate * 100) : 0}%
+            </div>
+            <p className="text-xs text-muted-foreground">Based on processed + listed returns</p>
+            <Progress value={metrics ? metrics.recovery.recovery_rate * 100 : 0} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -93,8 +129,10 @@ export default function AnalyticsDashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$12,500</div>
-            <p className="text-xs text-muted-foreground">+8% from last month</p>
+            <div className="text-2xl font-bold">
+              ${metrics ? Math.round(metrics.roi.total_resale_actions * 39) : 0}
+            </div>
+            <p className="text-xs text-muted-foreground">Proxy from resale actions</p>
           </CardContent>
         </Card>
 
@@ -104,8 +142,8 @@ export default function AnalyticsDashboard() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">295</div>
-            <p className="text-xs text-muted-foreground">+12% from last month</p>
+            <div className="text-2xl font-bold">{metrics ? metrics.recovery.processed : 0}</div>
+            <p className="text-xs text-muted-foreground">Processed returns</p>
           </CardContent>
         </Card>
 
@@ -115,8 +153,10 @@ export default function AnalyticsDashboard() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">87%</div>
-            <p className="text-xs text-muted-foreground">Classification accuracy</p>
+            <div className="text-2xl font-bold">
+              {metrics ? Math.round(metrics.roi.conversion_rate * 100) : 0}%
+            </div>
+            <p className="text-xs text-muted-foreground">Conversion proxy</p>
           </CardContent>
         </Card>
       </div>
@@ -160,7 +200,7 @@ export default function AnalyticsDashboard() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Gemini Insights</CardTitle>
+                <CardTitle>Insights</CardTitle>
                 <CardDescription>AI-generated market intelligence</CardDescription>
               </CardHeader>
               <CardContent>

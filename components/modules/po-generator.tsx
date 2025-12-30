@@ -18,6 +18,7 @@ export default function POGenerator() {
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null)
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null)
+  const [tenantId, setTenantId] = useState("")
   const [poData, setPOData] = useState({
     sku: "",
     quantity: "",
@@ -32,8 +33,13 @@ export default function POGenerator() {
   const formRef = useRef<HTMLFormElement>(null)
 
   useEffect(() => {
-    loadSuppliers()
-  }, [])
+    if (tenantId) {
+      loadSuppliers()
+    } else {
+      setSuppliers([])
+      setSelectedSupplierId(null)
+    }
+  }, [tenantId])
 
   useEffect(() => {
     if (selectedSupplierId) {
@@ -48,11 +54,11 @@ export default function POGenerator() {
 
   const loadSuppliers = async () => {
     try {
-      const { data, error } = await supabase
-        .from("suppliers")
-        .select("*")
-        .eq("flagged", false)
-        .order("sla_grade", { ascending: false })
+      let query = supabase.from("suppliers").select("*").eq("flagged", false).order("sla_grade", { ascending: false })
+      if (tenantId) {
+        query = query.eq("tenant_id", tenantId)
+      }
+      const { data, error } = await query
 
       if (error) throw error
       setSuppliers(data || [])
@@ -63,6 +69,7 @@ export default function POGenerator() {
 
   const [suggestState, suggestAction, isGenerating] = useActionState(async (prevState: any, formData: FormData) => {
     formData.append("supplierId", selectedSupplierId || "") // Append selected supplier ID
+    formData.append("tenantId", tenantId)
     const result = await suggestPOTermsAction(formData)
     if (result.success) {
       setAiSuggestions(result.data)
@@ -91,6 +98,7 @@ export default function POGenerator() {
   const [saveState, saveAction, isSaving] = useActionState(async (prevState: any, formData: FormData) => {
     formData.append("supplierId", selectedSupplierId || "")
     formData.append("aiSuggestions", JSON.stringify(aiSuggestions)) // Pass AI suggestions as stringified JSON
+    formData.append("tenantId", tenantId)
     const result = await savePOAction(formData)
     if (result.success) {
       toast({
@@ -143,6 +151,17 @@ export default function POGenerator() {
         <form ref={formRef} className="space-y-6">
           {/* Supplier Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenantId">Tenant ID *</Label>
+              <Input
+                id="tenantId"
+                name="tenantId"
+                value={tenantId}
+                onChange={(e) => setTenantId(e.target.value)}
+                placeholder="Tenant UUID"
+                required
+              />
+            </div>
             <div className="space-y-2">
               <Label>Supplier *</Label>
               <Select onValueChange={setSelectedSupplierId} value={selectedSupplierId || ""}>

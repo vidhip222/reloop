@@ -21,6 +21,7 @@ export type Database = {
       returns: {
         Row: {
           id: string
+          tenant_id: string | null
           sku: string
           return_reason: string
           image_url: string
@@ -31,9 +32,14 @@ export type Database = {
           status: string
           user_id: string
           relist_platform: string | null // Added relist_platform
+          metadata?: Record<string, any>
+          brand?: string | null
+          category?: string | null
+          condition?: string | null
           created_at: string
         }
         Insert: {
+          tenant_id?: string | null
           sku: string
           return_reason: string
           image_url: string
@@ -44,11 +50,16 @@ export type Database = {
           status: string
           user_id: string
           relist_platform?: string | null // Added relist_platform
+          metadata?: Record<string, any>
+          brand?: string | null
+          category?: string | null
+          condition?: string | null
         }
       }
       suppliers: {
         Row: {
           id: string
+          tenant_id?: string | null
           name: string
           avg_delivery_time: number
           return_rate: number
@@ -63,6 +74,7 @@ export type Database = {
       purchase_orders: {
         Row: {
           id: string
+          tenant_id?: string | null
           supplier_id: string
           sku: string
           quantity: number
@@ -71,6 +83,17 @@ export type Database = {
           status: string
           ai_suggestions: string
           created_at: string
+          user_id: string
+        }
+        Insert: {
+          tenant_id?: string | null
+          supplier_id: string
+          sku: string
+          quantity: number
+          unit_price: number
+          total_amount: number
+          status: string
+          ai_suggestions?: string
           user_id: string
         }
       }
